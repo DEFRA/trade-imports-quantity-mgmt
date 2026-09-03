@@ -18,21 +18,48 @@ permissions:
 jobs:
   pr-validator:
     name: Run Pull Request Checks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest    
     permissions:
       pull-requests: write
       id-token: write
+      packages: read
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # NuGet.config expands this at restore time
+      DEFRA_NUGET_PAT: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Check out code
-        uses: actions/checkout@v5
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
       - name: Test
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7
         with:
           dotnet-version: |
-            10.0
-      - run: dotnet test
+            10.0   
+      - name: Run unit tests
+        run: |
+          dotnet test --filter "Category!=IntegrationTest"
+      - name: Run integration tests
+        run: scripts/run-integration-tests.sh
+      - name: Docker Compose Logs
+        if: always()
+        run: |
+          docker compose logs
+      - name: Check Dockerfile Builds
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          tags: trade-imports-auantity-mgmt:latest
+          build-args: |
+            DEFRA_NUGET_PAT=${{ secrets.GITHUB_TOKEN }}
+      - name: Check with Trivy
+        run: |
+          docker run -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy:0.74.0 image \
+            --ignore-unfixed \
+            --exit-code 1 \
+            trade-imports-auantity-mgmt:latest
     ## SonarCloud
     ## Uncomment to unable SonarCloud scan
     ## Requires project to be set up in SonarCloud
