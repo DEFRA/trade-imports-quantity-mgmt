@@ -1,10 +1,10 @@
-using TradeImportsQuantityMgmt.Example.Models;
-using TradeImportsQuantityMgmt.Utils.Mongo;
-using MongoDB.Bson;
-using MongoDB.Driver;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.RegularExpressions;
+using MongoDB.Bson;
+using MongoDB.Driver;
+using TradeImportsQuantityMgmt.Example.Models;
 using TradeImportsQuantityMgmt.Utils.Auditing;
+using TradeImportsQuantityMgmt.Utils.Mongo;
 
 namespace TradeImportsQuantityMgmt.Example.Services;
 
@@ -16,17 +16,20 @@ public interface IExamplePersistence
 
     Task<IReadOnlyCollection<ExampleModel>> GetAllAsync(CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyCollection<ExampleModel>> SearchAsync(string searchTerm, CancellationToken cancellationToken = default);
+    Task<IReadOnlyCollection<ExampleModel>> SearchAsync(
+        string searchTerm,
+        CancellationToken cancellationToken = default
+    );
 
     Task<ExampleModel?> UpdateAsync(ExampleModel example, CancellationToken cancellationToken = default);
 
     Task<bool> DeleteAsync(string name, CancellationToken cancellationToken = default);
 }
 
-
 [ExcludeFromCodeCoverage]
 public class ExamplePersistence(IMongoDbClientFactory connectionFactory, ILoggerFactory loggerFactory)
-    : MongoService<ExampleModel>(connectionFactory, "example", loggerFactory), IExamplePersistence
+    : MongoService<ExampleModel>(connectionFactory, "example", loggerFactory),
+        IExamplePersistence
 {
     public async Task CreateAsync(ExampleModel example, CancellationToken cancellationToken = default)
     {
@@ -55,35 +58,35 @@ public class ExamplePersistence(IMongoDbClientFactory connectionFactory, ILogger
         return await Collection.Find(_ => true).ToListAsync(cancellationToken);
     }
 
-
     [ExcludeFromCodeCoverage]
-    public async Task<IReadOnlyCollection<ExampleModel>> SearchAsync(string searchTerm, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyCollection<ExampleModel>> SearchAsync(
+        string searchTerm,
+        CancellationToken cancellationToken = default
+    )
     {
         var escapedSearchTerm = Regex.Escape(searchTerm.Trim());
         var filter = Builders<ExampleModel>.Filter.Regex(
             model => model.Value,
-            new BsonRegularExpression(escapedSearchTerm, "i"));
+            new BsonRegularExpression(escapedSearchTerm, "i")
+        );
         var result = await Collection.Find(filter).ToListAsync(cancellationToken);
         return result;
     }
-
 
     [ExcludeFromCodeCoverage]
     public async Task<ExampleModel?> UpdateAsync(ExampleModel example, CancellationToken cancellationToken = default)
     {
         var filter = Builders<ExampleModel>.Filter.Eq(e => e.Name, example.Name);
-        var update = Builders<ExampleModel>.Update
-            .Set(e => e.Value, example.Value)
+        var update = Builders<ExampleModel>
+            .Update.Set(e => e.Value, example.Value)
             .Set(e => e.Counter, example.Counter);
 
         return await Collection.FindOneAndUpdateAsync(
             filter,
             update,
-            new FindOneAndUpdateOptions<ExampleModel>
-            {
-                ReturnDocument = ReturnDocument.After
-            },
-            cancellationToken);
+            new FindOneAndUpdateOptions<ExampleModel> { ReturnDocument = ReturnDocument.After },
+            cancellationToken
+        );
     }
 
     [ExcludeFromCodeCoverage]
@@ -95,7 +98,8 @@ public class ExamplePersistence(IMongoDbClientFactory connectionFactory, ILogger
 
     [ExcludeFromCodeCoverage]
     protected override List<CreateIndexModel<ExampleModel>> DefineIndexes(
-        IndexKeysDefinitionBuilder<ExampleModel> builder)
+        IndexKeysDefinitionBuilder<ExampleModel> builder
+    )
     {
         var options = new CreateIndexOptions { Unique = true };
         var nameIndex = new CreateIndexModel<ExampleModel>(builder.Ascending(e => e.Name), options);

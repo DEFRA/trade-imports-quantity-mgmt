@@ -1,8 +1,8 @@
-using TradeImportsQuantityMgmt.Example.Models;
-using TradeImportsQuantityMgmt.Example.Services;
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
+using TradeImportsQuantityMgmt.Example.Models;
+using TradeImportsQuantityMgmt.Example.Services;
 
 namespace TradeImportsQuantityMgmt.Example.Endpoints;
 
@@ -11,8 +11,7 @@ public static class ExampleEndpoints
 {
     public static RouteGroupBuilder MapExampleEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/example")
-            .WithTags("Example");
+        var group = app.MapGroup("/example").WithTags("Example");
 
         group.MapPost(string.Empty, Create);
         group.MapGet(string.Empty, GetAll);
@@ -26,13 +25,14 @@ public static class ExampleEndpoints
     private static async Task<Results<CreatedAtRoute<ExampleModel>, Conflict<ProblemDetails>>> Create(
         CreateExampleRequest request,
         [FromServices] IExamplePersistence examplePersistence,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var example = new ExampleModel
         {
             Name = request.Name,
             Value = request.Value,
-            Counter = request.Counter
+            Counter = request.Counter,
         };
 
         try
@@ -41,12 +41,14 @@ public static class ExampleEndpoints
         }
         catch (ExampleConflictException ex)
         {
-            return TypedResults.Conflict(new ProblemDetails
-            {
-                Title = "Example already exists",
-                Detail = ex.Message,
-                Status = StatusCodes.Status409Conflict
-            });
+            return TypedResults.Conflict(
+                new ProblemDetails
+                {
+                    Title = "Example already exists",
+                    Detail = ex.Message,
+                    Status = StatusCodes.Status409Conflict,
+                }
+            );
         }
 
         return TypedResults.CreatedAtRoute(example, "GetByName", new { name = example.Name });
@@ -55,7 +57,8 @@ public static class ExampleEndpoints
     private static async Task<Ok<IReadOnlyCollection<ExampleModel>>> GetAll(
         [FromQuery] string? searchTerm,
         [FromServices] IExamplePersistence examplePersistence,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         if (searchTerm is not null && !string.IsNullOrWhiteSpace(searchTerm))
         {
@@ -70,7 +73,8 @@ public static class ExampleEndpoints
     private static async Task<Results<Ok<ExampleModel>, NotFound>> GetByName(
         [FromRoute] string name,
         [FromServices] IExamplePersistence examplePersistence,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var example = await examplePersistence.GetByNameAsync(name, cancellationToken);
         return example is not null ? TypedResults.Ok(example) : TypedResults.NotFound();
@@ -80,13 +84,14 @@ public static class ExampleEndpoints
         [FromRoute] string name,
         UpdateExampleRequest request,
         [FromServices] IExamplePersistence examplePersistence,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var example = new ExampleModel
         {
             Name = name,
             Value = request.Value,
-            Counter = request.Counter
+            Counter = request.Counter,
         };
 
         var updated = await examplePersistence.UpdateAsync(example, cancellationToken);
@@ -96,7 +101,8 @@ public static class ExampleEndpoints
     private static async Task<Results<NoContent, NotFound>> Delete(
         [FromRoute] string name,
         [FromServices] IExamplePersistence examplePersistence,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var deleted = await examplePersistence.DeleteAsync(name, cancellationToken);
         return deleted ? TypedResults.NoContent() : TypedResults.NotFound();

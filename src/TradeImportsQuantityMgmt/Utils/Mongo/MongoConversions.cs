@@ -13,10 +13,7 @@ public static class MongoConventions
             return;
         }
 
-        var conversions = new ConventionPack
-        {
-            new CamelCaseElementNameConvention()
-        };
+        var conversions = new ConventionPack { new CamelCaseElementNameConvention() };
 
         ConventionRegistry.Register("CamelCase", conversions, _ => true);
     }

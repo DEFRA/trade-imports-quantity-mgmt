@@ -1,15 +1,15 @@
-using TradeImportsQuantityMgmt.Example.Endpoints;
-using TradeImportsQuantityMgmt.Example.Services;
-using TradeImportsQuantityMgmt.Config;
-using TradeImportsQuantityMgmt.Utils;
-using TradeImportsQuantityMgmt.Utils.Http;
-using TradeImportsQuantityMgmt.Utils.Mongo;
 using System.Diagnostics.CodeAnalysis;
-using TradeImportsQuantityMgmt.Utils.Logging;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using MongoDB.Driver;
 using MongoDB.Driver.Authentication.AWS;
 using Serilog;
+using TradeImportsQuantityMgmt.Config;
+using TradeImportsQuantityMgmt.Example.Endpoints;
+using TradeImportsQuantityMgmt.Example.Services;
+using TradeImportsQuantityMgmt.Utils;
+using TradeImportsQuantityMgmt.Utils.Http;
+using TradeImportsQuantityMgmt.Utils.Logging;
+using TradeImportsQuantityMgmt.Utils.Mongo;
 
 var app = BuildApp(args);
 await app.RunAsync();
@@ -78,15 +78,11 @@ static void ConfigureHeaderPropagation(IServiceCollection services, IConfigurati
 static void ConfigureHttpClients(IServiceCollection services)
 {
     services.AddTransient<ProxyHttpMessageHandler>();
-
-    // services.AddHttpClientWithTracing<IExampleClient, ExampleClient>();
-    // services.AddHttpClientWithProxy<IExternalClient, ExternalClient>();
 }
 
 [ExcludeFromCodeCoverage]
 static void ConfigureMongo(IServiceCollection services, IConfiguration configuration)
 {
-
     MongoExtensions.Register();
     MongoConventions.Register();
 

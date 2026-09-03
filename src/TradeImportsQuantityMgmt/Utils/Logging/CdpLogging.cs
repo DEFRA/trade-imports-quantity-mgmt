@@ -1,7 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
-using TradeImportsQuantityMgmt.Utils.Auditing;
 using Elastic.Serilog.Enrichers.Web;
 using Serilog;
+using TradeImportsQuantityMgmt.Utils.Auditing;
 
 namespace TradeImportsQuantityMgmt.Utils.Logging;
 
@@ -27,8 +27,6 @@ public static class CdpLogging
 
         var auditLogger = AuditLogger.CreateAuditLogger();
 
-        config
-            .WriteTo.Logger(mainLogger)
-            .WriteTo.Logger(auditLogger);
+        config.WriteTo.Logger(mainLogger).WriteTo.Logger(auditLogger);
     }
 }

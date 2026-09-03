@@ -1,7 +1,7 @@
-using MongoDB.Driver;
 using System.Diagnostics.CodeAnalysis;
-using TradeImportsQuantityMgmt.Config;
 using Microsoft.Extensions.Options;
+using MongoDB.Driver;
+using TradeImportsQuantityMgmt.Config;
 
 namespace TradeImportsQuantityMgmt.Utils.Mongo;
 

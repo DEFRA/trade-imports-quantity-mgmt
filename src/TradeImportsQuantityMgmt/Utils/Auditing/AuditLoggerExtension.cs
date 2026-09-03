@@ -7,12 +7,10 @@ public static class AuditLoggingExtension
 {
     private static readonly Dictionary<string, object> s_auditLogLevel = new()
     {
-        [AuditLogger.AuditPropertyName] = true
+        [AuditLogger.AuditPropertyName] = true,
     };
 
-    public static void Audit(this Microsoft.Extensions.Logging.ILogger logger,
-        string message,
-        params object?[] args)
+    public static void Audit(this Microsoft.Extensions.Logging.ILogger logger, string message, params object?[] args)
     {
         ArgumentNullException.ThrowIfNull(logger);
         using (logger.BeginScope(s_auditLogLevel))
@@ -21,10 +19,12 @@ public static class AuditLoggingExtension
         }
     }
 
-    public static void Audit(this Microsoft.Extensions.Logging.ILogger logger,
+    public static void Audit(
+        this Microsoft.Extensions.Logging.ILogger logger,
         Exception exception,
         string message,
-        params object?[] args)
+        params object?[] args
+    )
     {
         ArgumentNullException.ThrowIfNull(logger);
         using (logger.BeginScope(s_auditLogLevel))

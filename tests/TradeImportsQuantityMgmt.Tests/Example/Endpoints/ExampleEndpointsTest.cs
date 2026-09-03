@@ -1,7 +1,5 @@
 using System.Net;
 using System.Net.Http.Json;
-using TradeImportsQuantityMgmt.Example.Models;
-using TradeImportsQuantityMgmt.Example.Services;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -9,6 +7,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
+using TradeImportsQuantityMgmt.Example.Models;
+using TradeImportsQuantityMgmt.Example.Services;
 
 namespace TradeImportsQuantityMgmt.Test.Example.Endpoints;
 
@@ -21,12 +21,16 @@ public class ExampleEndpointsTest
         await using var factory = new TestApplicationFactory();
         using var client = factory.CreateClient();
 
-        var response = await client.PostAsJsonAsync("/example", new CreateExampleRequest
-        {
-            Name = "alpha",
-            Value = "first value",
-            Counter = 2
-        }, cancellationToken);
+        var response = await client.PostAsJsonAsync(
+            "/example",
+            new CreateExampleRequest
+            {
+                Name = "alpha",
+                Value = "first value",
+                Counter = 2,
+            },
+            cancellationToken
+        );
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         Assert.Equal("/example/alpha", response.Headers.Location?.AbsolutePath);
@@ -39,12 +43,16 @@ public class ExampleEndpointsTest
         await using var factory = new TestApplicationFactory();
         using var client = factory.CreateClient();
 
-        var response = await client.PostAsJsonAsync("/example", new CreateExampleRequest
-        {
-            Name = string.Empty,
-            Value = string.Empty,
-            Counter = -1
-        }, cancellationToken);
+        var response = await client.PostAsJsonAsync(
+            "/example",
+            new CreateExampleRequest
+            {
+                Name = string.Empty,
+                Value = string.Empty,
+                Counter = -1,
+            },
+            cancellationToken
+        );
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
 
@@ -62,17 +70,20 @@ public class ExampleEndpointsTest
         await using var factory = new TestApplicationFactory();
         using var client = factory.CreateClient();
 
-        factory.MockPersistence
-            .CreateAsync(Arg.Any<ExampleModel>(), Arg.Any<CancellationToken>())
+        factory
+            .MockPersistence.CreateAsync(Arg.Any<ExampleModel>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new ExampleConflictException("alpha", new Exception()));
 
-
-        var response = await client.PostAsJsonAsync("/example", new CreateExampleRequest
-        {
-            Name = "alpha",
-            Value = "second value",
-            Counter = 5
-        }, cancellationToken);
+        var response = await client.PostAsJsonAsync(
+            "/example",
+            new CreateExampleRequest
+            {
+                Name = "alpha",
+                Value = "second value",
+                Counter = 5,
+            },
+            cancellationToken
+        );
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
 
@@ -88,15 +99,22 @@ public class ExampleEndpointsTest
         await using var factory = new TestApplicationFactory();
         using var client = factory.CreateClient();
 
-        factory.MockPersistence
-            .UpdateAsync(Arg.Any<ExampleModel>(), Arg.Any<CancellationToken>())
-            .Returns(new ExampleModel { Name = "alpha", Counter = 1, Value = "first value" });
+        factory
+            .MockPersistence.UpdateAsync(Arg.Any<ExampleModel>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new ExampleModel
+                {
+                    Name = "alpha",
+                    Counter = 1,
+                    Value = "first value",
+                }
+            );
 
-        var response = await client.PutAsJsonAsync("/example/alpha", new UpdateExampleRequest
-        {
-            Value = "updated value",
-            Counter = 9
-        }, cancellationToken);
+        var response = await client.PutAsJsonAsync(
+            "/example/alpha",
+            new UpdateExampleRequest { Value = "updated value", Counter = 9 },
+            cancellationToken
+        );
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
@@ -119,9 +137,7 @@ public class ExampleEndpointsTest
         await using var factory = new TestApplicationFactory();
         using var client = factory.CreateClient();
 
-        factory.MockPersistence
-            .DeleteAsync(Arg.Is("alpha"), Arg.Any<CancellationToken>())
-            .Returns(true);
+        factory.MockPersistence.DeleteAsync(Arg.Is("alpha"), Arg.Any<CancellationToken>()).Returns(true);
 
         var response = await client.DeleteAsync("/example/alpha", cancellationToken);
         await factory.MockPersistence.Received().DeleteAsync(Arg.Is("alpha"), Arg.Any<CancellationToken>());
