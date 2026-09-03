@@ -39,7 +39,9 @@ jobs:
         run: |
            dotnet test --project tests/TradeImportsQuantityMgmt.Tests/TradeImportsQuantityMgmt.Tests.csproj
       - name: Run integration tests
-        run: scripts/run-integration-tests.sh
+        run: |
+          docker compose up -d
+          dotnet test --project tests/TradeImportsQuantityMgmt.IntegrationTests/TradeImportsQuantityMgmt.IntegrationTests.csproj
       - name: Docker Compose Logs
         if: always()
         run: |
