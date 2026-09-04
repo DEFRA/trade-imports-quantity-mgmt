@@ -35,6 +35,14 @@ jobs:
         with:
           dotnet-version: |
             10.0   
+      - name: Update NuGet.config
+        run: |
+          dotnet nuget remove source defra
+          dotnet nuget add source --username USERNAME --password $GITHUB_TOKEN --store-password-in-clear-text --name defra "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" --configfile NuGet.config
+      - name: Build and Publish
+        uses: DEFRA/cdp-build-action/build@5f3ba75f66a3ef96855322c137727ff996cc2995
+        with:
+          github-token: ${{ env.GITHUB_TOKEN }}
       - name: Run unit tests
         run: |
            dotnet test --project tests/TradeImportsQuantityMgmt.Tests/TradeImportsQuantityMgmt.Tests.csproj
@@ -62,6 +70,22 @@ jobs:
             --ignore-unfixed \
             --exit-code 1 \
             trade-imports-auantity-mgmt:latest
+      - name: Pack NuGets
+        if: github.actor != 'dependabot[bot]'
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number || '' }}
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: |
+          echo "Building a pre-release package for PR #$PR_NUMBER"
+          dotnet pack --no-restore --configuration Release -o ./nupkg \
+            /p:VersionSuffix="pr-$PR_NUMBER.$BUILD_NUMBER"
+      - name: Publish NuGets
+        if: github.actor != 'dependabot[bot]'
+        run: |
+          dotnet nuget push ./nupkg/*.nupkg \
+            --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" \
+            --api-key "$GITHUB_TOKEN" \
+            --skip-duplicate
     ## SonarCloud
     ## Uncomment to unable SonarCloud scan
     ## Requires project to be set up in SonarCloud
