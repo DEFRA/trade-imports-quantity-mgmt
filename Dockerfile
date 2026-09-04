@@ -24,6 +24,8 @@ RUN dotnet tool restore
 # Copy solution and project files for restore
 
 COPY src/TradeImportsQuantityMgmt/TradeImportsQuantityMgmt.csproj src/TradeImportsQuantityMgmt/TradeImportsQuantityMgmt.csproj
+COPY src/TradeImportsQuantityMgmt.Contract/TradeImportsQuantityMgmt.Contract.csproj src/TradeImportsQuantityMgmt.Contract/TradeImportsQuantityMgmt.Contract.csproj
+COPY src/TradeImportsQuantityMgmt.Client/TradeImportsQuantityMgmt.Client.csproj src/TradeImportsQuantityMgmt.Client/TradeImportsQuantityMgmt.Client.csproj
 COPY tests/TradeImportsQuantityMgmt.Tests/TradeImportsQuantityMgmt.Tests.csproj tests/TradeImportsQuantityMgmt.Tests/TradeImportsQuantityMgmt.Tests.csproj
 COPY tests/TradeImportsQuantityMgmt.IntegrationTests/*.csproj tests/TradeImportsQuantityMgmt.IntegrationTests/
 
@@ -38,6 +40,8 @@ RUN dotnet restore
 
 # Copy source code
 COPY src/TradeImportsQuantityMgmt src/TradeImportsQuantityMgmt
+COPY src/TradeImportsQuantityMgmt.Contract src/TradeImportsQuantityMgmt.Contract
+COPY src/TradeImportsQuantityMgmt.Client src/TradeImportsQuantityMgmt.Client
 COPY tests/TradeImportsQuantityMgmt.Tests tests/TradeImportsQuantityMgmt.Tests
 COPY tests/TradeImportsQuantityMgmt.IntegrationTests tests/TradeImportsQuantityMgmt.IntegrationTests
 
