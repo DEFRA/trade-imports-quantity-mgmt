@@ -2,75 +2,48 @@ services:
   # floci is a replacement for localstack. It emulates AWS resources (sqs, sns, s3 etc) for local development
   # See: https://floci.io for more details
   floci:
-    image: hectorvent/floci:latest-aws
+    image: floci/floci:1.6.0-compat
     ports:
-      - '4566:4566'
+      - '4566:4566'  
     env_file:
-      - 'compose/aws.env'
-    environment:
-      FLOCI_DEFAULT_REGION: eu-west-2
+      - ./compose/config/aws.env
+      - ./compose/config/floci.env
     volumes:
-      - ./compose/floci/start.d:/etc/floci/init/start.d:ro
-    networks:
-      - cdp-tenant
-
-  redis:
-    image: redis:7.2.3-alpine3.18
-    ports:
-      - '6379:6379'
-    networks:
-      - cdp-tenant
+      - ./compose/floci/ready.d:/etc/floci/init/ready.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:4566/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
 
   mongodb:
     image: mongo:7.0.28
-    networks:
-      - cdp-tenant
     ports:
       - '27017:27017'
     volumes:
       - mongodb-data:/data
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.hello().ok"]
+      interval: 5s
+      start_period: 5s
+      retries: 3
+    restart: always
 
-  ################################################################################
-
-  # your-frontend:
-  #   image: defradigital/your-frontend:${YOUR_FRONTEND_VERSION:-latest}
-  #   ports:
-  #     - '3000:3000'
-  #   links:
-  #     - 'floci:floci'
-  #     - 'redis:redis'
-  #   depends_on:
-  #     floci:
-  #       condition: service_healthy
-  #     redis:
-  #       condition: service_started
-  #   env_file:
-  #     - 'compose/aws.env'
-  #   environment:
-  #     PORT: 3000
-  #     NODE_ENV: development
-  #     REDIS_HOST: redis
-  #     USE_SINGLE_INSTANCE_CACHE: true
-  #   networks:
-  #     - cdp-tenant
-
-  your-backend:
-    build: ./
+  trade-imports-quantity-mgmt:
+    build:
+      args:
+        DEFRA_NUGET_PAT: ${DEFRA_NUGET_PAT}
+      dockerfile: Dockerfile
     ports:
       - '8085:8085'
-    links:
-      - 'floci:floci'
-      - 'mongodb:mongodb'
     depends_on:
       floci:
         condition: service_healthy
       mongodb:
         condition: service_started
     env_file:
-      - 'compose/aws.env'
-    environment:
-      ASPNETCORE_URLS: http://+:8085
-      Mongo__DatabaseUri: mongodb://mongodb:27017/
+      - ./compose/config/aws.env
     networks:
       - cdp-tenant
 
