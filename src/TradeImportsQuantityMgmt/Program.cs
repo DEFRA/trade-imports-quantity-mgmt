@@ -1,10 +1,12 @@
 using System.Diagnostics.CodeAnalysis;
 using Defra.TradeImports.Api.Metrics;
 using Defra.TradeImports.EmfExporter;
+using Defra.TradeImports.Tracing;
 using FluentValidation;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.OpenApi;
 using Serilog;
+using Trade.Gateway.Api.Client.Extensions;
 using TradeImportsQuantityMgmt.Config;
 using TradeImportsQuantityMgmt.Endpoints;
 using TradeImportsQuantityMgmt.Health;
@@ -49,6 +51,16 @@ static void ConfigureServices(WebApplicationBuilder builder)
 
     services.AddProblemDetails();
     services.AddValidation();
+    services
+        .AddTracesGatewayApiClients(configuration)
+        .WithSts()
+        .WithLogging()
+        .WithAcceptLanguage()
+        .WithTracing(sp =>
+        {
+            var traceContextAccessor = sp.GetRequiredService<ITraceContextAccessor>();
+            return traceContextAccessor.Context?.TraceId ?? Guid.CreateVersion7().ToString("N");
+        });
     builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
     builder.Services.AddEndpointsApiExplorer();
@@ -67,6 +79,7 @@ static void ConfigureServices(WebApplicationBuilder builder)
     builder.Services.AddApiMetrics();
 
     services.AddHttpContextAccessor();
+    services.AddTraceContextAccessor(configuration);
 
     ConfigureHeaderPropagation(services, configuration);
     ConfigureHttpClients(services);

@@ -14,6 +14,7 @@
 
   <ItemGroup>
     <PackageReference Include="Defra.TradeImports.Api.Metrics" Version="0.1.0" />
+    <PackageReference Include="Defra.TradeImports.Tracing" Version="0.2.0" />
     <PackageReference Include="Defra.TradeImports.EmfExporter" Version="0.2.0" />
     <PackageReference Include="Defra.Trade.Gateway.Api.Client" Version="0.3.0" />
     <PackageReference Include="Elastic.CommonSchema.Serilog" Version="9.0.0" />
