@@ -1,0 +1,455 @@
+﻿{
+  openapi: 3.0.4,
+  info: {
+    title: Trade Imports Quantity Management,
+    version: v1
+  },
+  paths: {
+    /customs/cheds/{chedId}/declarations/{mrn}/reservation: {
+      put: {
+        tags: [
+          QuantityEndpoints
+        ],
+        parameters: [
+          {
+            name: chedId,
+            in: path,
+            required: true,
+            schema: {
+              type: string
+            }
+          },
+          {
+            name: mrn,
+            in: path,
+            required: true,
+            schema: {
+              type: string
+            }
+          }
+        ],
+        requestBody: {
+          content: {
+            application/json: {
+              schema: {
+                $ref: #/components/schemas/ChedReservationRequest
+              }
+            }
+          },
+          required: true
+        },
+        responses: {
+          200: {
+            description: OK,
+            content: {
+              application/vnd.defra.trade.ched-reservation.v1+json: {
+                schema: {
+                  $ref: #/components/schemas/ChedDeclarationReservation
+                }
+              }
+            }
+          },
+          400: {
+            description: Bad Request,
+            content: {
+              application/problem+json: {
+                schema: {
+                  $ref: #/components/schemas/HttpValidationProblemDetails
+                }
+              }
+            }
+          },
+          403: {
+            description: Forbidden,
+            content: {
+              application/problem+json: {
+                schema: {
+                  $ref: #/components/schemas/ProblemDetails
+                }
+              }
+            }
+          },
+          404: {
+            description: Not Found,
+            content: {
+              application/problem+json: {
+                schema: {
+                  $ref: #/components/schemas/ProblemDetails
+                }
+              }
+            }
+          },
+          409: {
+            description: Conflict,
+            content: {
+              application/problem+json: {
+                schema: {
+                  $ref: #/components/schemas/ProblemDetails
+                }
+              }
+            }
+          },
+          500: {
+            description: Internal Server Error,
+            content: {
+              application/problem+json: {
+                schema: {
+                  $ref: #/components/schemas/ProblemDetails
+                }
+              }
+            }
+          },
+          502: {
+            description: Bad Gateway,
+            content: {
+              application/problem+json: {
+                schema: {
+                  $ref: #/components/schemas/ProblemDetails
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  components: {
+    schemas: {
+      AllocatedCommodityQuantity: {
+        required: [
+          quantity
+        ],
+        type: object,
+        properties: {
+          goodsItemNumber: {
+            type: integer,
+            description: The item on the customs declaration this allocation was made for.,
+            format: int32,
+            nullable: true
+          },
+          commodityCode: {
+            $ref: #/components/schemas/CommodityCode
+          },
+          certificateLineNumber: {
+            type: integer,
+            description: The CHED line this allocation draws from.,
+            format: int32,
+            nullable: true
+          },
+          unitOfMeasure: {
+            $ref: #/components/schemas/UniversalUnitOfMeasureType
+          },
+          quantity: {
+            type: number,
+            description: The allocated amount, expressed in unitOfMeasure.,
+            format: double
+          },
+          technicalRoundingQuantity: {
+            type: number,
+            description: Amount added or removed by TracesNT to reconcile unit conversion rounding.,
+            format: double,
+            nullable: true
+          },
+          eventDateTime: {
+            type: string,
+            description: When the allocation was made.,
+            format: date-time,
+            nullable: true
+          },
+          customsOffice: {
+            type: string,
+            description: Reference number of the customs office that made the allocation.,
+            nullable: true
+          },
+          declarationReference: {
+            $ref: #/components/schemas/DeclarationReference
+          }
+        },
+        additionalProperties: false
+      },
+      ChedDeclarationReservation: {
+        required: [
+          consumed,
+          reserved
+        ],
+        type: object,
+        properties: {
+          reserved: {
+            type: array,
+            items: {
+              $ref: #/components/schemas/AllocatedCommodityQuantity
+            },
+            description: Quantities this declaration holds against the CHED but has not yet consumed.,
+            nullable: true
+          },
+          consumed: {
+            type: array,
+            items: {
+              $ref: #/components/schemas/AllocatedCommodityQuantity
+            },
+            description: Quantities this declaration has written off against the CHED.,
+            nullable: true
+          }
+        },
+        additionalProperties: false
+      },
+      ChedReservationRequest: {
+        required: [
+          items
+        ],
+        type: object,
+        properties: {
+          items: {
+            minItems: 1,
+            type: array,
+            items: {
+              $ref: #/components/schemas/ReservationCommodityItem
+            },
+            description: The consignment items to reserve. At least one is required.
+          }
+        },
+        additionalProperties: false
+      },
+      CommodityCode: {
+        type: object,
+        properties: {
+          harmonizedSystemSubheadingCode: {
+            type: string,
+            description: Harmonized System subheading, 6 digits.,
+            nullable: true
+          },
+          combinedNomenclatureCode: {
+            type: string,
+            description: Combined Nomenclature code, extending the HS subheading to 8 digits.,
+            nullable: true
+          },
+          taricCode: {
+            type: string,
+            description: TARIC code, extending the Combined Nomenclature code to 10 digits.,
+            nullable: true
+          }
+        },
+        additionalProperties: false
+      },
+      DeclarationReference: {
+        required: [
+          type,
+          value
+        ],
+        type: object,
+        properties: {
+          type: {
+            $ref: #/components/schemas/DeclarationReferenceType
+          },
+          value: {
+            type: string,
+            description: The declaration reference itself.,
+            nullable: true
+          }
+        },
+        additionalProperties: false
+      },
+      DeclarationReferenceType: {
+        enum: [
+          LRN,
+          MRN
+        ],
+        type: string
+      },
+      HttpValidationProblemDetails: {
+        type: object,
+        properties: {
+          type: {
+            type: string,
+            nullable: true
+          },
+          title: {
+            type: string,
+            nullable: true
+          },
+          status: {
+            type: integer,
+            format: int32,
+            nullable: true
+          },
+          detail: {
+            type: string,
+            nullable: true
+          },
+          instance: {
+            type: string,
+            nullable: true
+          },
+          errors: {
+            type: object,
+            additionalProperties: {
+              type: array,
+              items: {
+                type: string
+              }
+            },
+            nullable: true
+          }
+        }
+      },
+      ProblemDetails: {
+        type: object,
+        properties: {
+          type: {
+            type: string,
+            nullable: true
+          },
+          title: {
+            type: string,
+            nullable: true
+          },
+          status: {
+            type: integer,
+            format: int32,
+            nullable: true
+          },
+          detail: {
+            type: string,
+            nullable: true
+          },
+          instance: {
+            type: string,
+            nullable: true
+          }
+        }
+      },
+      ReservationCommodityItem: {
+        required: [
+          certificateLineNumber,
+          classCode,
+          goodsItemNumber
+        ],
+        type: object,
+        properties: {
+          goodsItemNumber: {
+            type: integer,
+            description: The item on the customs declaration this reservation is for.,
+            format: int32
+          },
+          certificateLineNumber: {
+            type: integer,
+            description: The CHED line to draw the quantity from.,
+            format: int32
+          },
+          classCode: {
+            minLength: 1,
+            type: string,
+            description: Commodity class code as stated on the CHED line.
+          },
+          netWeightQuantity: {
+            maximum: 1.7976931348623157E+308,
+            minimum: 0,
+            type: number,
+            description: Net weight to reserve, expressed in netWeightUnitOfMeasure.,
+            format: double,
+            nullable: true
+          },
+          netWeightUnitOfMeasure: {
+            $ref: #/components/schemas/UniversalUnitOfMeasureType
+          },
+          netVolumeQuantity: {
+            maximum: 1.7976931348623157E+308,
+            minimum: 0,
+            type: number,
+            description: Net volume to reserve, expressed in netVolumeUnitOfMeasure.,
+            format: double,
+            nullable: true
+          },
+          netVolumeUnitOfMeasure: {
+            $ref: #/components/schemas/UniversalUnitOfMeasureType
+          }
+        },
+        additionalProperties: false
+      },
+      UniversalUnitOfMeasureType: {
+        enum: [
+          TNE,
+          KTN,
+          KGM,
+          GRM,
+          LTR,
+          MTQ,
+          H87,
+          LEF,
+          STW,
+          ASV,
+          ASVX,
+          CCT,
+          CEN,
+          CMQ,
+          CTM,
+          DAP,
+          DHS,
+          DTN,
+          DTNE,
+          DTNF,
+          DTNG,
+          DTNL,
+          DTNM,
+          DTNR,
+          DTNS,
+          DTNZ,
+          ENP,
+          EUR,
+          GFI,
+          GRT,
+          HLT,
+          HMT,
+          KAC,
+          KCC,
+          KCL,
+          KGMA,
+          KGME,
+          KGMG,
+          KGMP,
+          KGMS,
+          KGMT,
+          KLT,
+          KMA,
+          KMT,
+          KNI,
+          KNS,
+          KPH,
+          KPO,
+          KPP,
+          KSD,
+          KSH,
+          KUR,
+          LPA,
+          LTRA,
+          MIL,
+          MLT,
+          MPR,
+          MTK,
+          MTQC,
+          MTR,
+          MWH,
+          NARB,
+          NCL,
+          NPR,
+          TJO,
+          TCE,
+          TNEE,
+          TNEI,
+          TNEJ,
+          TNEK,
+          TNEM,
+          TNER,
+          TNEZ,
+          WAT
+        ],
+        type: string
+      }
+    }
+  },
+  tags: [
+    {
+      name: QuantityEndpoints
+    }
+  ]
+}
