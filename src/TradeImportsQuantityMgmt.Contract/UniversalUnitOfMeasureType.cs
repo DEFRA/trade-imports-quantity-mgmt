@@ -1,5 +1,8 @@
-﻿namespace TradeImportsQuantityMgmt.Contract;
+﻿using System.Text.Json.Serialization;
 
+namespace TradeImportsQuantityMgmt.Contract;
+
+[JsonConverter(typeof(JsonStringEnumConverter<UniversalUnitOfMeasureType>))]
 public enum UniversalUnitOfMeasureType
 {
     /// <remarks/>

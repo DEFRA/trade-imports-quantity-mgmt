@@ -1,11 +1,16 @@
 using System.Diagnostics.CodeAnalysis;
+using Defra.TradeImports.Api.Metrics;
+using Defra.TradeImports.EmfExporter;
+using Defra.TradeImports.Tracing;
+using FluentValidation;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
-using MongoDB.Driver;
-using MongoDB.Driver.Authentication.AWS;
+using Microsoft.Extensions.Options;
+using Microsoft.OpenApi;
 using Serilog;
+using Trade.Gateway.Api.Client.Extensions;
 using TradeImportsQuantityMgmt.Config;
-using TradeImportsQuantityMgmt.Example.Endpoints;
-using TradeImportsQuantityMgmt.Example.Services;
+using TradeImportsQuantityMgmt.Endpoints;
+using TradeImportsQuantityMgmt.Health;
 using TradeImportsQuantityMgmt.Utils;
 using TradeImportsQuantityMgmt.Utils.Http;
 using TradeImportsQuantityMgmt.Utils.Logging;
@@ -48,16 +53,24 @@ static void ConfigureServices(WebApplicationBuilder builder)
     services.AddProblemDetails();
     services.AddValidation();
 
+    builder.Services.AddValidatorsFromAssemblyContaining<Program>();
+
+    builder.Services.AddEndpointsApiExplorer();
+    builder.Services.AddSwaggerGen(options =>
+    {
+        options.SwaggerDoc("v1", new OpenApiInfo { Title = "Trade Imports Quantity Management", Version = "v1" });
+    });
+
+    builder.Services.AddApiMetrics();
+
     services.AddHttpContextAccessor();
+    services.AddTraceContextAccessor(configuration);
 
     ConfigureHeaderPropagation(services, configuration);
-    ConfigureHttpClients(services);
+    ConfigureHttpClients(services, configuration);
     ConfigureMongo(services, configuration);
 
-    services.AddHealthChecks();
-
-    // App services
-    services.AddSingleton<IExamplePersistence, ExamplePersistence>();
+    services.AddHealth(configuration);
 }
 
 [ExcludeFromCodeCoverage]
@@ -75,9 +88,25 @@ static void ConfigureHeaderPropagation(IServiceCollection services, IConfigurati
 }
 
 [ExcludeFromCodeCoverage]
-static void ConfigureHttpClients(IServiceCollection services)
+static void ConfigureHttpClients(IServiceCollection services, IConfiguration configuration)
 {
+    services
+        .AddTracesGatewayApiClients(configuration)
+        .WithSts()
+        .WithLogging()
+        .WithAcceptLanguage()
+        .WithTracing(sp =>
+        {
+            var traceContextAccessor = sp.GetRequiredService<ITraceContextAccessor>();
+            return traceContextAccessor.Context?.TraceId ?? Guid.CreateVersion7().ToString("N");
+        });
+
+    // Default HTTP Client
+    services.AddHttpClient("DefaultClient").AddHeaderPropagation();
+
+    // Proxy HTTP Client
     services.AddTransient<ProxyHttpMessageHandler>();
+    services.AddHttpClient("proxy").ConfigurePrimaryHttpMessageHandler<ProxyHttpMessageHandler>();
 }
 
 [ExcludeFromCodeCoverage]
@@ -98,16 +127,26 @@ static void ConfigureMongo(IServiceCollection services, IConfiguration configura
 [ExcludeFromCodeCoverage]
 static void ConfigureMiddleware(WebApplication app)
 {
-    app.UseSerilogRequestLogging();
+    app.UseSwagger(options =>
+    {
+        options.RouteTemplate = ".well-known/openapi/{documentName}/openapi.json";
+    });
+    app.UseReDoc(options =>
+    {
+        options.RoutePrefix = "redoc";
+        options.ConfigObject.ExpandResponses = "200";
+        options.SpecUrl("/.well-known/openapi/v1/openapi.json");
+    });
 
+    app.UseMiddleware<ApiMetricsMiddleware>();
+    app.UseSerilogRequestLogging();
     app.UseHeaderPropagation();
+    app.MapHealth();
+    app.UseEmfExporter(app.Services.GetRequiredService<IOptions<ApiMetricsOptions>>().Value.MeterName);
 }
 
 [ExcludeFromCodeCoverage]
 static void ConfigureEndpoints(WebApplication app)
 {
-    app.MapHealthChecks("/health", new HealthCheckOptions());
-
-    // Remove before deploying
-    app.MapExampleEndpoints();
+    app.UseChedQuantityEndpoints();
 }

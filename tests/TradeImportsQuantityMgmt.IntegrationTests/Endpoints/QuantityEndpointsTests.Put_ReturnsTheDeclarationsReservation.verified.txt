@@ -1,0 +1,10 @@
+﻿{
+  Reserved: [
+    {
+      GoodsItemNumber: 1,
+      CertificateLineNumber: 1,
+      UnitOfMeasure: ASVX,
+      Quantity: 300.0
+    }
+  ]
+}
