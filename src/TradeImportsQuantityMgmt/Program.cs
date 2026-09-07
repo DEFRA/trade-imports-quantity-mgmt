@@ -1,11 +1,12 @@
 using System.Diagnostics.CodeAnalysis;
+using Defra.TradeImports.Api.Metrics;
+using Defra.TradeImports.EmfExporter;
+using FluentValidation;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
-using MongoDB.Driver;
-using MongoDB.Driver.Authentication.AWS;
+using Microsoft.OpenApi;
 using Serilog;
 using TradeImportsQuantityMgmt.Config;
-using TradeImportsQuantityMgmt.Example.Endpoints;
-using TradeImportsQuantityMgmt.Example.Services;
+using TradeImportsQuantityMgmt.Endpoints;
 using TradeImportsQuantityMgmt.Utils;
 using TradeImportsQuantityMgmt.Utils.Http;
 using TradeImportsQuantityMgmt.Utils.Logging;
@@ -47,6 +48,22 @@ static void ConfigureServices(WebApplicationBuilder builder)
 
     services.AddProblemDetails();
     services.AddValidation();
+    builder.Services.AddValidatorsFromAssemblyContaining<Program>();
+
+    builder.Services.AddEndpointsApiExplorer();
+    builder.Services.AddSwaggerGen(options =>
+    {
+        options.SwaggerDoc("v1", new OpenApiInfo { Title = "Trade Imports Quantity Management", Version = "v1" });
+    });
+
+    // Default HTTP Client
+    builder.Services.AddHttpClient("DefaultClient").AddHeaderPropagation();
+
+    // Proxy HTTP Client
+    builder.Services.AddTransient<ProxyHttpMessageHandler>();
+    builder.Services.AddHttpClient("proxy").ConfigurePrimaryHttpMessageHandler<ProxyHttpMessageHandler>();
+
+    builder.Services.AddApiMetrics();
 
     services.AddHttpContextAccessor();
 
@@ -55,9 +72,6 @@ static void ConfigureServices(WebApplicationBuilder builder)
     ConfigureMongo(services, configuration);
 
     services.AddHealthChecks();
-
-    // App services
-    services.AddSingleton<IExamplePersistence, ExamplePersistence>();
 }
 
 [ExcludeFromCodeCoverage]
@@ -98,16 +112,27 @@ static void ConfigureMongo(IServiceCollection services, IConfiguration configura
 [ExcludeFromCodeCoverage]
 static void ConfigureMiddleware(WebApplication app)
 {
-    app.UseSerilogRequestLogging();
+    app.UseSwagger(options =>
+    {
+        options.RouteTemplate = ".well-known/openapi/{documentName}/openapi.json";
+    });
+    app.UseReDoc(options =>
+    {
+        options.RoutePrefix = "redoc";
+        options.ConfigObject.ExpandResponses = "200";
+        options.SpecUrl("/.well-known/openapi/v1/openapi.json");
+    });
 
+    app.UseMiddleware<ApiMetricsMiddleware>();
+    app.UseSerilogRequestLogging();
     app.UseHeaderPropagation();
+    app.MapHealthChecks("/health").AllowAnonymous();
+    app.UseEmfExporter(Constants.MeterName);
 }
 
 [ExcludeFromCodeCoverage]
 static void ConfigureEndpoints(WebApplication app)
 {
     app.MapHealthChecks("/health", new HealthCheckOptions());
-
-    // Remove before deploying
-    app.MapExampleEndpoints();
+    app.UseChedQuantityEndpoints();
 }

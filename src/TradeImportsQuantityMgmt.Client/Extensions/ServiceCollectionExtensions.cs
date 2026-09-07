@@ -57,11 +57,4 @@ public static class ServiceCollectionExtensions
 
         return builder;
     }
-
-    public static QuantityManagementClientsBuilder WithAcceptLanguage(this QuantityManagementClientsBuilder builder)
-    {
-        builder.AddHandler<AcceptLanguageDelegatingHandle>();
-
-        return builder;
-    }
 }
