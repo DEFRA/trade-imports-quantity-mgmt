@@ -4,6 +4,7 @@ using Defra.TradeImports.EmfExporter;
 using Defra.TradeImports.Tracing;
 using FluentValidation;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Options;
 using Microsoft.OpenApi;
 using Serilog;
 using Trade.Gateway.Api.Client.Extensions;
@@ -141,12 +142,11 @@ static void ConfigureMiddleware(WebApplication app)
     app.UseSerilogRequestLogging();
     app.UseHeaderPropagation();
     app.MapHealth();
-    app.UseEmfExporter(Constants.MeterName);
+    app.UseEmfExporter(app.Services.GetRequiredService<IOptions<ApiMetricsOptions>>().Value.MeterName);
 }
 
 [ExcludeFromCodeCoverage]
 static void ConfigureEndpoints(WebApplication app)
 {
-    app.MapHealthChecks("/health", new HealthCheckOptions());
     app.UseChedQuantityEndpoints();
 }
