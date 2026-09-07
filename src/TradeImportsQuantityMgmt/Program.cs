@@ -7,6 +7,7 @@ using Microsoft.OpenApi;
 using Serilog;
 using TradeImportsQuantityMgmt.Config;
 using TradeImportsQuantityMgmt.Endpoints;
+using TradeImportsQuantityMgmt.Health;
 using TradeImportsQuantityMgmt.Utils;
 using TradeImportsQuantityMgmt.Utils.Http;
 using TradeImportsQuantityMgmt.Utils.Logging;
@@ -71,7 +72,7 @@ static void ConfigureServices(WebApplicationBuilder builder)
     ConfigureHttpClients(services);
     ConfigureMongo(services, configuration);
 
-    services.AddHealthChecks();
+    services.AddHealth(configuration);
 }
 
 [ExcludeFromCodeCoverage]
@@ -126,7 +127,7 @@ static void ConfigureMiddleware(WebApplication app)
     app.UseMiddleware<ApiMetricsMiddleware>();
     app.UseSerilogRequestLogging();
     app.UseHeaderPropagation();
-    app.MapHealthChecks("/health").AllowAnonymous();
+    app.MapHealth();
     app.UseEmfExporter(Constants.MeterName);
 }
 
