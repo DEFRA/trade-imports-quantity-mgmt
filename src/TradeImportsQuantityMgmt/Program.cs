@@ -52,16 +52,7 @@ static void ConfigureServices(WebApplicationBuilder builder)
 
     services.AddProblemDetails();
     services.AddValidation();
-    services
-        .AddTracesGatewayApiClients(configuration)
-        .WithSts()
-        .WithLogging()
-        .WithAcceptLanguage()
-        .WithTracing(sp =>
-        {
-            var traceContextAccessor = sp.GetRequiredService<ITraceContextAccessor>();
-            return traceContextAccessor.Context?.TraceId ?? Guid.CreateVersion7().ToString("N");
-        });
+
     builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
     builder.Services.AddEndpointsApiExplorer();
@@ -70,20 +61,13 @@ static void ConfigureServices(WebApplicationBuilder builder)
         options.SwaggerDoc("v1", new OpenApiInfo { Title = "Trade Imports Quantity Management", Version = "v1" });
     });
 
-    // Default HTTP Client
-    builder.Services.AddHttpClient("DefaultClient").AddHeaderPropagation();
-
-    // Proxy HTTP Client
-    builder.Services.AddTransient<ProxyHttpMessageHandler>();
-    builder.Services.AddHttpClient("proxy").ConfigurePrimaryHttpMessageHandler<ProxyHttpMessageHandler>();
-
     builder.Services.AddApiMetrics();
 
     services.AddHttpContextAccessor();
     services.AddTraceContextAccessor(configuration);
 
     ConfigureHeaderPropagation(services, configuration);
-    ConfigureHttpClients(services);
+    ConfigureHttpClients(services, configuration);
     ConfigureMongo(services, configuration);
 
     services.AddHealth(configuration);
@@ -104,9 +88,25 @@ static void ConfigureHeaderPropagation(IServiceCollection services, IConfigurati
 }
 
 [ExcludeFromCodeCoverage]
-static void ConfigureHttpClients(IServiceCollection services)
+static void ConfigureHttpClients(IServiceCollection services, IConfiguration configuration)
 {
+    services
+        .AddTracesGatewayApiClients(configuration)
+        .WithSts()
+        .WithLogging()
+        .WithAcceptLanguage()
+        .WithTracing(sp =>
+        {
+            var traceContextAccessor = sp.GetRequiredService<ITraceContextAccessor>();
+            return traceContextAccessor.Context?.TraceId ?? Guid.CreateVersion7().ToString("N");
+        });
+
+    // Default HTTP Client
+    services.AddHttpClient("DefaultClient").AddHeaderPropagation();
+
+    // Proxy HTTP Client
     services.AddTransient<ProxyHttpMessageHandler>();
+    services.AddHttpClient("proxy").ConfigurePrimaryHttpMessageHandler<ProxyHttpMessageHandler>();
 }
 
 [ExcludeFromCodeCoverage]
