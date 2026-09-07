@@ -12,7 +12,6 @@ concurrency:
 
 permissions:
   contents: read
-  packages: read
 
 env:
   AWS_REGION: eu-west-2
@@ -27,6 +26,7 @@ jobs:
       id-token: write
       contents: write
       pull-requests: write
+      packages: write
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -45,6 +45,16 @@ jobs:
         uses: DEFRA/cdp-build-action/build@5f3ba75f66a3ef96855322c137727ff996cc2995
         with:
           github-token: ${{ env.GITHUB_TOKEN }}
+      - name: Pack NuGets
+        run: |
+          echo "Building a stable release package"
+          dotnet pack --configuration Release -o ./nupkg
+      - name: Publish NuGets
+        run: |
+          dotnet nuget push ./nupkg/*.nupkg \
+            --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" \
+            --api-key "$GITHUB_TOKEN" \
+            --skip-duplicate
   ## SonarCloud
   ## Uncomment to enable SonarCloud scan
   ## Requires project to be set up in SonarCloud
