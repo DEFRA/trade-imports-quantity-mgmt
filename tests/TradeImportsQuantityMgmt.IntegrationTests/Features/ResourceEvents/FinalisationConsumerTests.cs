@@ -1,19 +1,14 @@
+using System.Diagnostics;
+using System.Text.Json;
 using Amazon.Runtime;
 using Amazon.SQS;
 using Amazon.SQS.Model;
-
 using AwesomeAssertions;
-
 using Defra.TradeImportsDataApi.Domain.CustomsDeclaration;
 using Defra.TradeImportsDataApi.Domain.Events;
 using Defra.TradeImportsDataApi.Domain.Ipaffs;
-
 using NSubstitute;
 using NSubstitute.ClearExtensions;
-
-using System.Diagnostics;
-using System.Text.Json;
-
 using ResourceEventFinalState = TradeImportsQuantityMgmt.Features.ResourceEvents.FinalState;
 
 namespace TradeImportsQuantityMgmt.IntegrationTests.Features.ResourceEvents;
