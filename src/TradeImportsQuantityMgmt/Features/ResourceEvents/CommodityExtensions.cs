@@ -25,7 +25,7 @@ namespace TradeImportsQuantityMgmt.Features.ResourceEvents
                         or "N851"
                         or "N852"
                         or "N853"
-                ) && ValidTracesChedReference().IsMatch(importDocument?.DocumentReference?.Value ?? string.Empty);
+                ) && ValidTracesChedReference().IsMatch(importDocument.DocumentReference?.Value ?? string.Empty);
         }
 
         [GeneratedRegex("^(?:CHEDA|CHED|CHEDP|CHEDPP)\\.[A-Z]{2}\\.\\d{4}\\.\\d{7,8}$")]
