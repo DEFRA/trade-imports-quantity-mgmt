@@ -25,10 +25,7 @@ public class ClearanceRequestExtensionsTests
         var commodity2 = new Commodity { Documents = new[] { doc1 } }; // duplicate reference
         var commodity3 = new Commodity { Documents = new[] { doc2 } };
 
-        var clearance = new ClearanceRequest
-        {
-            Commodities = new[] { commodity1, commodity2, commodity3 }
-        };
+        var clearance = new ClearanceRequest { Commodities = new[] { commodity1, commodity2, commodity3 } };
 
         var traces = clearance.GetTracesCheds().ToArray();
 

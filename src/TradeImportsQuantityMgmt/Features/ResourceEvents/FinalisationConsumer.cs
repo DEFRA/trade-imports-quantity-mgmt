@@ -3,6 +3,7 @@ using Infrastructure;
 using Infrastructure.Messaging.Consuming;
 using Microsoft.Net.Http.Headers;
 using Trade.Gateway.Api.Client.Clients;
+using TradeImportsQuantityMgmt.Exceptions;
 
 namespace TradeImportsQuantityMgmt.Features.ResourceEvents
 {
@@ -69,7 +70,7 @@ namespace TradeImportsQuantityMgmt.Features.ResourceEvents
 
                         if (!response.IsSuccessStatusCode)
                         {
-                            throw new QuantityReleaseFailureException(movementReferenceNumber, chedReference);
+                            throw new QuantityCancellationFailureException(movementReferenceNumber, chedReference);
                         }
                     }
                     break;

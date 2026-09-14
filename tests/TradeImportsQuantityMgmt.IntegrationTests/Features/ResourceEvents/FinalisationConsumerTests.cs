@@ -1,14 +1,13 @@
-using AwesomeAssertions;
+using System.Diagnostics;
 using System.Text.Json;
 using Amazon.Runtime;
 using Amazon.SQS;
 using Amazon.SQS.Model;
+using AwesomeAssertions;
 using Defra.TradeImportsDataApi.Domain.CustomsDeclaration;
 using Defra.TradeImportsDataApi.Domain.Events;
 using Defra.TradeImportsDataApi.Domain.Ipaffs;
 using NSubstitute;
-using System.Diagnostics;
-
 using ResourceEventFinalState = TradeImportsQuantityMgmt.Features.ResourceEvents.FinalState;
 
 namespace TradeImportsQuantityMgmt.IntegrationTests.Features.ResourceEvents;
@@ -38,8 +37,12 @@ public class FinalisationConsumerTests(TradeGatewayWebApplicationFactory factory
         _httpClient = factory.CreateClient();
 
         // Ensure the traces gateway client returns a successful response for the release call
-        factory.TracesGatewayChedClient
-            .ReleaseChedReservation(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+        factory
+            .TracesGatewayChedClient.ReleaseChedReservation(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>()
+            )
             .Returns(Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)));
 
         var customsDeclarationEvent = new CustomsDeclarationEvent
@@ -49,20 +52,25 @@ public class FinalisationConsumerTests(TradeGatewayWebApplicationFactory factory
             {
                 ExternalVersion = 1,
                 FinalState = ResourceEventFinalState.Cleared,
-                IsManualRelease = false
+                IsManualRelease = false,
             },
-            ClearanceRequest = new ClearanceRequest { 
-            Commodities = [
-                new Commodity { 
-                    Documents = [ 
-                            new ImportDocument {
+            ClearanceRequest = new ClearanceRequest
+            {
+                Commodities =
+                [
+                    new Commodity
+                    {
+                        Documents =
+                        [
+                            new ImportDocument
+                            {
                                 DocumentReference = new ImportDocumentReference(Ched),
-                                DocumentCode = "9115"
-                            }
-                        ] 
-                    }
-                ]
-            }
+                                DocumentCode = "9115",
+                            },
+                        ],
+                    },
+                ],
+            },
         };
 
         var messageAttributes = new Dictionary<string, MessageAttributeValue>
@@ -97,7 +105,9 @@ public class FinalisationConsumerTests(TradeGatewayWebApplicationFactory factory
             {
                 try
                 {
-                    await factory.TracesGatewayChedClient.Received(1).ReleaseChedReservation(Ched, Mrn, Arg.Any<CancellationToken>());
+                    await factory
+                        .TracesGatewayChedClient.Received(1)
+                        .ReleaseChedReservation(Ched, Mrn, Arg.Any<CancellationToken>());
                     return true;
                 }
                 catch

@@ -32,6 +32,7 @@ public class CommodityExtensionsTests
         var commodity = new Commodity { Documents = new[] { doc } };
 
         var ched = commodity.GetChedNumber();
-        ched.Should().Be("CHEDA.GB.2026.1234567");
+
+        ched.Should().Be("CHEDA.GB.2026.1234567");
     }
 }

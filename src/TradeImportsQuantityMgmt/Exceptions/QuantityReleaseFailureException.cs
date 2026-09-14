@@ -1,4 +1,4 @@
-namespace TradeImportsQuantityMgmt
+namespace TradeImportsQuantityMgmt.Exceptions
 {
     public class QuantityReleaseFailureException(string mrn, string ched)
         : Exception($"Failed to release quantity items for MRN {mrn} and Ched {ched}")
