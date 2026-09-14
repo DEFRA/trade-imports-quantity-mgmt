@@ -23,6 +23,7 @@ RUN dotnet tool restore
 
 # Copy solution and project files for restore
 
+COPY src/Infrastructure/Infrastructure.csproj src/Infrastructure/Infrastructure.csproj
 COPY src/TradeImportsQuantityMgmt/TradeImportsQuantityMgmt.csproj src/TradeImportsQuantityMgmt/TradeImportsQuantityMgmt.csproj
 COPY src/TradeImportsQuantityMgmt.Contract/TradeImportsQuantityMgmt.Contract.csproj src/TradeImportsQuantityMgmt.Contract/TradeImportsQuantityMgmt.Contract.csproj
 COPY src/TradeImportsQuantityMgmt.Client/TradeImportsQuantityMgmt.Client.csproj src/TradeImportsQuantityMgmt.Client/TradeImportsQuantityMgmt.Client.csproj
@@ -39,6 +40,7 @@ ARG DEFRA_NUGET_PAT
 RUN dotnet restore
 
 # Copy source code
+COPY src/Infrastructure src/Infrastructure
 COPY src/TradeImportsQuantityMgmt src/TradeImportsQuantityMgmt
 COPY src/TradeImportsQuantityMgmt.Contract src/TradeImportsQuantityMgmt.Contract
 COPY src/TradeImportsQuantityMgmt.Client src/TradeImportsQuantityMgmt.Client

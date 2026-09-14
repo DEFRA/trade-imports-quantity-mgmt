@@ -9,7 +9,7 @@ services:
       - ./compose/config/aws.env
       - ./compose/config/floci.env
     volumes:
-      - ./compose/floci/ready.d:/etc/floci/init/ready.d:ro
+      - ./compose/floci/start.d:/etc/floci/init/start.d:ro
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:4566/health || exit 1"]
       interval: 5s
@@ -47,6 +47,18 @@ services:
     networks:
       - cdp-tenant
 
+  wiremock:
+    image: "holomekc/wiremock-gui:latest"
+    ports:
+      # This is just an example of a port mapping
+      - "8088:8089"
+      - "8084:8088"
+    command:
+      "--port 8089 --https-port 8088 --max-request-journal 1000 --local-response-templating"
+    volumes:
+      - ./root-dir:/home/wiremock:ro
+    environment:
+      WIREMOCK_MY_VAR: "systemValue response templating feature"
 ################################################################################
 
 volumes:

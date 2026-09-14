@@ -3,6 +3,7 @@ using Defra.TradeImports.Api.Metrics;
 using Defra.TradeImports.EmfExporter;
 using Defra.TradeImports.Tracing;
 using FluentValidation;
+using Infrastructure.Messaging.Extensions;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi;
@@ -10,6 +11,7 @@ using Serilog;
 using Trade.Gateway.Api.Client.Extensions;
 using TradeImportsQuantityMgmt.Config;
 using TradeImportsQuantityMgmt.Endpoints;
+using TradeImportsQuantityMgmt.Features.ResourceEvents;
 using TradeImportsQuantityMgmt.Health;
 using TradeImportsQuantityMgmt.Utils;
 using TradeImportsQuantityMgmt.Utils.Http;
@@ -52,6 +54,17 @@ static void ConfigureServices(WebApplicationBuilder builder)
 
     services.AddProblemDetails();
     services.AddValidation();
+
+    services
+        .AddOptions<ResourceEventConsumerOptions>()
+        .Bind(configuration.GetSection(ResourceEventConsumerOptions.SectionName))
+        .ValidateOnStart();
+    services.AddMessaging(configuration);
+
+    services.AddConsumer<FinalisationConsumer>(
+        sp => sp.GetRequiredService<IOptions<ResourceEventConsumerOptions>>().Value.ResourceEventsQueueUrl,
+        message => message.IsFinalisation()
+    );
 
     builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
