@@ -24,18 +24,12 @@ public class TradeGatewayWebApplicationFactory : WebApplicationFactory<Program>
     public WireMockServer WireMockServer => Services.GetRequiredService<WireMockServer>();
     public string WireMockBaseUrl { get; } = "http://localhost:8088";
 
-    /// <summary>
-    /// The traces gateway client is mocked rather than routed through <see cref="WireMockServer"/> -
-    /// it has no base URL configured for the test host, and its request/response shapes are owned by
-    /// an upstream package rather than this API, so there's little value stubbing it over HTTP.
-    /// </summary>
-    public ITracesGatewayChedClient TracesGatewayChedClient { get; } = Substitute.For<ITracesGatewayChedClient>();
-
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         // Without this the underlying MetricsLogger used in the EmfExporter will try to probe for the environment
         // when AWS_EMF_ENABLED is set to true, which takes a long time
         Environment.SetEnvironmentVariable("AWS_EMF_ENVIRONMENT", "Local");
+        var server = WireMockServer.Start();
 
         builder.UseEnvironment("Development");
 
@@ -51,6 +45,9 @@ public class TradeGatewayWebApplicationFactory : WebApplicationFactory<Program>
                         ["AWS_REGION"] = "eu-west-2",
                         ["SNS_ENDPOINT"] = FlociEndpoint,
                         ["SQS_ENDPOINT"] = FlociEndpoint,
+
+                        // The tests run against a local WireMock container emulating the Traces Gateway
+                        ["TracesGateway:BaseUrl"] = WireMockBaseUrl,
 
                         ["ResourceEventsConsumer:ResourceEventsQueueUrl"] =
                             "http://floci:4566/000000000000/trade_imports_data_upserted_quantity_mgmt",
@@ -77,7 +74,7 @@ public class TradeGatewayWebApplicationFactory : WebApplicationFactory<Program>
                 services.RemoveAll<IAmazonSecurityTokenService>();
                 services.AddSingleton(sts);
 
-                services.AddSingleton(TracesGatewayChedClient);
+                services.AddSingleton(server);
             }
         );
     }

@@ -37,15 +37,6 @@ public class FinalisationConsumerTests(TradeGatewayWebApplicationFactory factory
         // Start the app so the background SQS consumer runs
         _httpClient = factory.CreateClient();
 
-        // Ensure the traces gateway client returns a successful response for the release call
-        factory
-            .TracesGatewayChedClient.ReleaseChedReservation(
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<CancellationToken>()
-            )
-            .Returns(Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)));
-
         var customsDeclarationEvent = new CustomsDeclarationEvent
         {
             Id = Mrn,
@@ -101,27 +92,15 @@ public class FinalisationConsumerTests(TradeGatewayWebApplicationFactory factory
             _cancellationToken
         );
 
+        var expectedPath = $"/customs/cheds/{Ched}/declarations/{Mrn}/reservation/release";
         var releaseProcessed = await WaitHelper.WaitUntilAsync(
-            async () =>
-            {
-                try
-                {
-                    await factory
-                        .TracesGatewayChedClient.Received(1)
-                        .ReleaseChedReservation(Ched, Mrn, Arg.Any<CancellationToken>());
-                    return true;
-                }
-                catch
-                {
-                    return false;
-                }
-            },
+            async () => await WireMockStubber.VerifyRequest(factory.WireMockBaseUrl, expectedPath, _cancellationToken),
             TimeSpan.FromSeconds(60),
             TimeSpan.FromMilliseconds(500),
             _cancellationToken
         );
 
-        releaseProcessed.Should().BeTrue("ReleaseChedReservation should be called within 120s");
+        releaseProcessed.Should().BeTrue("ReleaseChedReservation should be called within 60s");
     }
 
     public async ValueTask DisposeAsync()
@@ -133,9 +112,8 @@ public class FinalisationConsumerTests(TradeGatewayWebApplicationFactory factory
     {
         await _sqsClient.PurgeQueueAsync(new PurgeQueueRequest { QueueUrl = QueueUrl }, _cancellationToken);
 
-        // The traces gateway client is a singleton shared across every test in the collection -
-        // clear it down so a previous test's setup can't leak into this one.
-        factory.TracesGatewayChedClient.ClearSubstitute();
+        await WireMockStubber.ResetAsync(factory.WireMockBaseUrl);
+        await WireMockStubber.StubChedReleaseAsync(factory.WireMockBaseUrl, Mrn, Ched, CancellationToken.None);
 
         await Task.Delay(100, _cancellationToken);
     }
