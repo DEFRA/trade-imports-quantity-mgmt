@@ -1,13 +1,19 @@
-using System.Diagnostics;
-using System.Text.Json;
 using Amazon.Runtime;
 using Amazon.SQS;
 using Amazon.SQS.Model;
+
 using AwesomeAssertions;
+
 using Defra.TradeImportsDataApi.Domain.CustomsDeclaration;
 using Defra.TradeImportsDataApi.Domain.Events;
 using Defra.TradeImportsDataApi.Domain.Ipaffs;
+
 using NSubstitute;
+using NSubstitute.ClearExtensions;
+
+using System.Diagnostics;
+using System.Text.Json;
+
 using ResourceEventFinalState = TradeImportsQuantityMgmt.Features.ResourceEvents.FinalState;
 
 namespace TradeImportsQuantityMgmt.IntegrationTests.Features.ResourceEvents;
@@ -126,8 +132,6 @@ public class FinalisationConsumerTests(TradeGatewayWebApplicationFactory factory
     public async ValueTask DisposeAsync()
     {
         _httpClient?.Dispose();
-        _sqsClient.Dispose();
-        await factory.DisposeAsync();
     }
 
     public async ValueTask InitializeAsync()
@@ -136,6 +140,11 @@ public class FinalisationConsumerTests(TradeGatewayWebApplicationFactory factory
         await WireMockStubber.StubChedReleaseAsync(factory.WireMockBaseUrl, Mrn, Ched, CancellationToken.None);
 
         await _sqsClient.PurgeQueueAsync(new PurgeQueueRequest { QueueUrl = QueueUrl }, _cancellationToken);
+
+        // The traces gateway client is a singleton shared across every test in the collection -
+        // clear it down so a previous test's setup can't leak into this one.
+        factory.TracesGatewayChedClient.ClearSubstitute();
+
         await Task.Delay(100, _cancellationToken);
     }
 }
