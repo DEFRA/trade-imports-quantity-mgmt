@@ -136,9 +136,6 @@ public class FinalisationConsumerTests(TradeGatewayWebApplicationFactory factory
 
     public async ValueTask InitializeAsync()
     {
-        await WireMockStubber.ResetAsync(factory.WireMockBaseUrl);
-        await WireMockStubber.StubChedReleaseAsync(factory.WireMockBaseUrl, Mrn, Ched, CancellationToken.None);
-
         await _sqsClient.PurgeQueueAsync(new PurgeQueueRequest { QueueUrl = QueueUrl }, _cancellationToken);
 
         // The traces gateway client is a singleton shared across every test in the collection -

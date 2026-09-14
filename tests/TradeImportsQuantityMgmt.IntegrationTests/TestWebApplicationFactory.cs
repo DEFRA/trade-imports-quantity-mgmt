@@ -39,28 +39,11 @@ public class TradeGatewayWebApplicationFactory : WebApplicationFactory<Program>
 
         builder.UseEnvironment("Development");
 
-        var server = WireMockServer.Start();
-        ////var tracesBaseUrl = $"http://localhost:{server.Port}";
-
         builder.ConfigureAppConfiguration(
             (_, config) =>
                 config.AddInMemoryCollection(
                     new Dictionary<string, string?>
                     {
-                        ////["TracesNt:BaseUrl"] = tracesBaseUrl,
-                        ////["TracesNt:CustomsOfficeReferenceNumber"] = "GBTEST01",
-                        ////["TracesNt:Credentials:Default:Username"] = "test-user",
-                        ////["TracesNt:Credentials:Default:AuthenticationKey"] = "test-auth-key",
-                        ////["TracesNt:Credentials:Default:WebServiceClientId"] = "test-client-id",
-                        ////// Deliberately different from the default set — TracesNtCredentialsTests
-                        ////// asserts the customs port authenticates as this account, not the default one.
-                        ////["TracesNt:Credentials:Customs:Username"] = "test-customs-user",
-                        ////["TracesNt:Credentials:Customs:AuthenticationKey"] = "test-customs-auth-key",
-                        ////["TracesNt:Credentials:Customs:WebServiceClientId"] = "test-customs-client-id",
-                        ////// Authentication authorities come from appsettings.Development.json so that BindConfig
-                        ////// (which reads config before WebApplicationFactory overrides apply) sees the same values
-                        ////// as the token endpoints registered by LocalTokenServer at runtime.
-
                         // The tests run against a local Floci AWS emulator running via Docker
                         ["USE_FLOCI"] = "true",
                         ["AWS_ACCESS_KEY_ID"] = "test",
@@ -94,7 +77,6 @@ public class TradeGatewayWebApplicationFactory : WebApplicationFactory<Program>
                 services.RemoveAll<IAmazonSecurityTokenService>();
                 services.AddSingleton(sts);
 
-                services.AddSingleton(server);
                 services.AddSingleton(TracesGatewayChedClient);
             }
         );

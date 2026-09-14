@@ -47,18 +47,6 @@ services:
     networks:
       - cdp-tenant
 
-  wiremock:
-    image: "holomekc/wiremock-gui:latest"
-    ports:
-      # This is just an example of a port mapping
-      - "8088:8089"
-      - "8084:8088"
-    command:
-      "--port 8089 --https-port 8088 --max-request-journal 1000 --local-response-templating"
-    volumes:
-      - ./root-dir:/home/wiremock:ro
-    environment:
-      WIREMOCK_MY_VAR: "systemValue response templating feature"
 ################################################################################
 
 volumes:
