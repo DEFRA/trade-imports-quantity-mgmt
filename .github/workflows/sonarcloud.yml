@@ -9,15 +9,13 @@ on:
 
 permissions:
   contents: read
+  packages: read
 
 jobs:
   build:
     if: github.run_number != 1
     name: CDP SonarCloud coverage scan
     runs-on: ubuntu-latest
-    env:
-      # NuGet.config expands this at restore time
-      DEFRA_NUGET_PAT: ${{ secrets.GITHUB_TOKEN }}
     permissions:
       id-token: write
       pull-requests: write
@@ -29,30 +27,30 @@ jobs:
           java-version: 17
           distribution: "zulu"
       - name: Check out code
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 #v6
         with:
           fetch-depth: 0
       - name: Set up .NET 10.0
-        uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7
+        uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 #v5
         with:
           dotnet-version: |
             10.0
       - name: Cache SonarCloud packages
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae #v5
         with:
           path: ~/sonar/cache
           key: ${{ runner.os }}-sonar
           restore-keys: ${{ runner.os }}-sonar
       - name: Cache SonarCloud scanner
         id: cache-sonar-scanner
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae #v5
         with:
           path: ./.sonar/scanner
           key: ${{ runner.os }}-sonar-scanner
           restore-keys: ${{ runner.os }}-sonar-scanner
       - name: Cache dotNet code coverage
         id: cache-sonar-coverage
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae #v5
         with:
           path: ./.sonar/coverage
           key: ${{ runner.os }}-sonar-coverage
@@ -70,8 +68,8 @@ jobs:
       - name: Build and analyze
         if: github.actor != 'dependabot[bot]'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Needed to get PR information, if any
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          DEFRA_NUGET_PAT: ${{ secrets.GITHUB_TOKEN }}
         run: |
           ./.sonar/scanner/dotnet-sonarscanner begin /k:"DEFRA_trade-imports-quantity-mgmt" /o:"defra" /d:sonar.token="$SONAR_TOKEN" /d:sonar.host.url="https://sonarcloud.io" /d:sonar.cs.vscoveragexml.reportsPaths=coverage.xml
           dotnet build --no-incremental
