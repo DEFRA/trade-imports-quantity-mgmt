@@ -16,7 +16,7 @@ namespace TradeImportsQuantityMgmt.Features.ResourceEvents
         {
             logger.LogInformation("Processing Resource Event for trace {TraceId}", context.GetTraceId());
 
-            var message = context.Body.FromJson<ResourceEvent<CustomsDeclarationEvent>>();
+            var message = context.ParseMessage<ResourceEvent<CustomsDeclarationEvent>>();
             var movementReferenceNumber = message!.Resource!.Id;
 
             var chedReferences = message.Resource!.ClearanceRequest!.GetTracesCheds().ToArray();
@@ -33,7 +33,7 @@ namespace TradeImportsQuantityMgmt.Features.ResourceEvents
 
             switch (message.Resource.Finalisation?.FinalState)
             {
-                case FinalState.Cleared when message.Resource.Finalisation?.IsManualRelease == false:
+                case FinalState.Cleared when message.Resource.Finalisation?.IsManualRelease is false:
 
                     foreach (var chedReference in chedReferences)
                     {

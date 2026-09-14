@@ -1,10 +1,13 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Text.Json;
 using Defra.TradeImports.Api.Metrics;
 using Defra.TradeImports.EmfExporter;
 using Defra.TradeImports.Tracing;
 using FluentValidation;
+using Infrastructure;
 using Infrastructure.Messaging.Extensions;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.Http.Json;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi;
 using Serilog;
@@ -49,10 +52,13 @@ static void ConfigureServices(WebApplicationBuilder builder)
     var services = builder.Services;
     var configuration = builder.Configuration;
 
+    services.Configure<JsonOptions>(opts => opts.SerializerOptions.ConfigureJsonSerializerOptions());
+
     // Trust material must be loaded before anything creates outbound connections.
     services.LoadCustomTrustStoreFromEnvironment();
 
     services.AddProblemDetails();
+
     services.AddValidation();
 
     services

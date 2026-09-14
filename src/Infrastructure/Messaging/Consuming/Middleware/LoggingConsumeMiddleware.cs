@@ -2,7 +2,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Infrastructure.Messaging.Consuming;
 
-public class MessageFilterMiddleware(ILogger<MessageFilterMiddleware> logger) : IConsumeMiddleware
+public class LoggingConsumeMiddleware(ILogger<LoggingConsumeMiddleware> logger) : IConsumeMiddleware
 {
     public async Task InvokeAsync(
         MessageContext context,

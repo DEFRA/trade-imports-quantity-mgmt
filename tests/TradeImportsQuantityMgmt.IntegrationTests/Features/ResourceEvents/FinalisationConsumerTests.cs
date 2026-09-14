@@ -85,7 +85,8 @@ public class FinalisationConsumerTests(TradeGatewayWebApplicationFactory factory
                         ResourceId = "resourceId",
                         Operation = "operation",
                         ResourceType = nameof(CustomsDeclarationEvent),
-                    }
+                    },
+                    new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }
                 ),
                 MessageAttributes = messageAttributes,
             },
