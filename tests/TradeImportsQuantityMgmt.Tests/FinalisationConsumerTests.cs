@@ -174,4 +174,58 @@ public class FinalisationConsumerTests
                 Arg.Any<Func<object, Exception?, string>>()
             );
     }
+
+    [Fact]
+    public async Task ConsumeAsync_LogsWarning_WhenResourceIsNull()
+    {
+        // Arrange
+        var tracesClient = Substitute.For<ITracesGatewayChedClient>();
+        var logger = Substitute.For<ILogger<FinalisationConsumer>>();
+
+        var consumer = new FinalisationConsumer(logger, tracesClient);
+
+        var resourceEvent = new ResourceEvent<CustomsDeclarationEvent>
+        {
+            Resource = null,
+            ResourceId = "resourceId",
+            Operation = "operation",
+            ResourceType = nameof(CustomsDeclarationEvent),
+        };
+
+        var message = new Message
+        {
+            Body = resourceEvent.ToJson(),
+            MessageId = "1",
+            MessageAttributes = [],
+        };
+
+        message.MessageAttributes[MetricNames.TraceKey] = new MessageAttributeValue
+        {
+            DataType = "String",
+            StringValue = "{11111111-1111-1111-1111-111111111111}",
+        };
+
+        var context = new MessageContext
+        {
+            Message = message,
+            QueueUrl = "queue",
+            ConsumerType = typeof(FinalisationConsumer),
+        };
+
+        // Act
+        await consumer.ConsumeAsync(context, TestContext.Current.CancellationToken);
+
+        // Assert: a warning should be logged indicating deserialisation
+        var expectedMessage = "Message for trace {11111111-1111-1111-1111-111111111111} could not be deserialised";
+
+        logger
+            .Received(1)
+            .Log(
+                Microsoft.Extensions.Logging.LogLevel.Warning,
+                Arg.Any<Microsoft.Extensions.Logging.EventId>(),
+                Arg.Is<object>(o => (o != null ? o.ToString() : string.Empty) == expectedMessage),
+                Arg.Any<Exception>(),
+                Arg.Any<Func<object, Exception?, string>>()
+            );
+    }
 }

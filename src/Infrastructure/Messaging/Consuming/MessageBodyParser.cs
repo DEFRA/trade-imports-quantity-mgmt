@@ -1,6 +1,5 @@
 using System.IO.Compression;
 using System.Text;
-using System.Text.Json;
 using Infrastructure.Messaging.Exceptions;
 
 namespace Infrastructure.Messaging.Consuming;
@@ -12,9 +11,6 @@ public static class MessageBodyParser
     public static T? ParseMessage<T>(this MessageContext context)
         where T : class
     {
-        if (context is null)
-            return null;
-
         var body = context.Body ?? string.Empty;
 
         var header = context.GetHeader(CompressedHeader);

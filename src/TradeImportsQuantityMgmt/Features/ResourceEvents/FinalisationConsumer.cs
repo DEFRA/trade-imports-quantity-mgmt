@@ -14,9 +14,16 @@ namespace TradeImportsQuantityMgmt.Features.ResourceEvents
             logger.LogInformation("Processing Resource Event for trace {TraceId}", context.GetTraceId());
 
             var message = context.ParseMessage<ResourceEvent<CustomsDeclarationEvent>>();
-            var movementReferenceNumber = message!.Resource!.Id;
 
-            var chedReferences = message.Resource!.ClearanceRequest!.GetTracesCheds().ToArray();
+            if (message?.Resource == null)
+            {
+                logger.LogWarning("Message for trace {TraceId} could not be deserialised", context.GetTraceId());
+                return;
+            }
+
+            var movementReferenceNumber = message.Resource.Id;
+
+            var chedReferences = message.Resource.ClearanceRequest.GetTracesCheds().ToArray() ?? [];
 
             if (!chedReferences.Any())
             {
@@ -88,7 +95,7 @@ namespace TradeImportsQuantityMgmt.Features.ResourceEvents
                 default:
                     logger.LogInformation(
                         "No action required for final state {FinalState}",
-                        message?.Resource?.Finalisation?.FinalState
+                        message.Resource.Finalisation?.FinalState
                     );
                     break;
             }
