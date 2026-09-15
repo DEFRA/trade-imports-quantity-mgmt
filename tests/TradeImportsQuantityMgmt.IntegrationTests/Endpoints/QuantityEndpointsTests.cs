@@ -21,7 +21,7 @@ public class QuantityEndpointsTests(TradeGatewayWebApplicationFactory factory, I
     private TextWriter? _originalConsoleOut;
     private TextWriter? _originalConsoleError;
 
-    public ValueTask InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         _originalConsoleOut = Console.Out;
         _originalConsoleError = Console.Error;
@@ -30,11 +30,8 @@ public class QuantityEndpointsTests(TradeGatewayWebApplicationFactory factory, I
         Console.SetOut(writer);
         Console.SetError(writer);
 
-        // The traces gateway client is a singleton shared across every test in the collection -
-        // clear it down so a previous test's setup can't leak into this one.
-        factory.TracesGatewayChedClient.ClearSubstitute();
-
-        return ValueTask.CompletedTask;
+        // Reset WireMock mappings so previous tests don't leak state.
+        await WireMockStubber.ResetAsync(factory.WireMockBaseUrl, TestContext.Current.CancellationToken);
     }
 
     public ValueTask DisposeAsync()
@@ -66,20 +63,15 @@ public class QuantityEndpointsTests(TradeGatewayWebApplicationFactory factory, I
             Consumed = [],
         };
 
-        factory
-            .TracesGatewayChedClient.PutChedReservation(
-                Ched,
-                Mrn,
-                Arg.Any<GatewayChedReservationRequest>(),
-                Arg.Any<CancellationToken>()
-            )
-            .Returns(
-                new ApiResponse<GatewayChedDeclarationReservation>(
-                    new HttpResponseMessage(HttpStatusCode.OK),
-                    gatewayResponse,
-                    new RefitSettings()
-                )
-            );
+        // Stub WireMock to return the gateway response for the PUT reservation call.
+        await WireMockStubber.StubChedPutReservationAsync(
+            factory.WireMockBaseUrl,
+            Mrn,
+            Ched,
+            HttpStatusCode.OK,
+            jsonBody: gatewayResponse,
+            cancellationToken: TestContext.Current.CancellationToken
+        );
 
         var response = await factory
             .CreateQuantityManagementClient()
@@ -106,21 +98,15 @@ public class QuantityEndpointsTests(TradeGatewayWebApplicationFactory factory, I
             new RefitSettings()
         );
 
-        factory
-            .TracesGatewayChedClient.PutChedReservation(
-                Ched,
-                Mrn,
-                Arg.Any<GatewayChedReservationRequest>(),
-                Arg.Any<CancellationToken>()
-            )
-            .Returns(
-                new ApiResponse<GatewayChedDeclarationReservation>(
-                    gatewayErrorResponse,
-                    default!,
-                    new RefitSettings(),
-                    gatewayError
-                )
-            );
+        // Stub WireMock to return a 404 for the PUT reservation call.
+        await WireMockStubber.StubChedPutReservationAsync(
+            factory.WireMockBaseUrl,
+            Mrn,
+            Ched,
+            HttpStatusCode.NotFound,
+            jsonBody: null,
+            cancellationToken: TestContext.Current.CancellationToken
+        );
 
         var response = await factory
             .CreateQuantityManagementClient()
@@ -152,14 +138,14 @@ public class QuantityEndpointsTests(TradeGatewayWebApplicationFactory factory, I
         problem!.Errors.Should().ContainKey(nameof(ChedReservationRequest.Items));
 
         // Validation should short-circuit before the request ever reaches the gateway.
-        await factory
-            .TracesGatewayChedClient.DidNotReceive()
-            .PutChedReservation(
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<GatewayChedReservationRequest>(),
-                Arg.Any<CancellationToken>()
-            );
+        // Verify WireMock did not receive the PUT reservation request - validation should short-circuit.
+        var saw = await WireMockStubber.VerifyRequest(
+            factory.WireMockBaseUrl,
+            $"customs/cheds/{Ched}/declarations/{Mrn}/reservation",
+            TestContext.Current.CancellationToken
+        );
+
+        saw.Should().BeFalse();
     }
 
     private static ChedReservationRequest ValidRequest() =>
