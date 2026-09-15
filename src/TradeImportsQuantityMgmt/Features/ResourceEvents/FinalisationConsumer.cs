@@ -23,7 +23,7 @@ namespace TradeImportsQuantityMgmt.Features.ResourceEvents
 
             var movementReferenceNumber = message.Resource.Id;
 
-            var chedReferences = message.Resource.ClearanceRequest.GetTracesCheds().ToArray() ?? [];
+            var chedReferences = message.Resource.ClearanceRequest.GetTracesCheds().ToArray();
 
             if (!chedReferences.Any())
             {
