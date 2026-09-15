@@ -1,23 +1,20 @@
 using System.Net;
-using System.Net.Http;
 using Amazon.SQS.Model;
-using AwesomeAssertions;
 using Defra.TradeImportsDataApi.Domain.CustomsDeclaration;
 using Defra.TradeImportsDataApi.Domain.Events;
 using Infrastructure;
 using Infrastructure.Messaging.Consuming;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Trade.Gateway.Api.Client.Clients;
-using TradeImportsQuantityMgmt.Exceptions;
 using TradeImportsQuantityMgmt.Features.ResourceEvents;
-using ResourceEvents = TradeImportsQuantityMgmt.Features.ResourceEvents;
 
 namespace TradeImportsQuantityMgmt.Tests;
 
 public class FinalisationConsumerTests
 {
     [Fact]
-    public async Task ConsumeAsync_ThrowsQuantityReleaseFailureException_WhenReleaseFails()
+    public async Task ConsumeAsync_LogsWarning_WhenReleaseFails()
     {
         // Arrange
         var mrn = "25GBVLKTCO0HN7MUA4";
@@ -28,7 +25,7 @@ public class FinalisationConsumerTests
             .ReleaseChedReservation(Arg.Any<string>(), Arg.Any<string>(), TestContext.Current.CancellationToken)
             .Returns(Task.FromResult(new HttpResponseMessage(HttpStatusCode.InternalServerError)));
 
-        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<FinalisationConsumer>>();
+        var logger = Substitute.For<ILogger<FinalisationConsumer>>();
 
         var consumer = new FinalisationConsumer(logger, tracesClient);
 
@@ -38,95 +35,25 @@ public class FinalisationConsumerTests
             Finalisation = new Finalisation
             {
                 ExternalVersion = 1,
-                FinalState = ResourceEvents.FinalState.Cleared,
+                FinalState = FinalState.Cleared,
                 IsManualRelease = false,
             },
             ClearanceRequest = new ClearanceRequest
             {
-                Commodities = new[]
-                {
+                Commodities =
+                [
                     new Commodity
                     {
-                        Documents = new[]
-                        {
+                        Documents =
+                        [
                             new ImportDocument
                             {
                                 DocumentCode = "9115",
                                 DocumentReference = new ImportDocumentReference(ched),
                             },
-                        },
+                        ],
                     },
-                },
-            },
-        };
-
-        var resourceEvent = new ResourceEvent<CustomsDeclarationEvent>
-        {
-            Resource = customsEvent,
-            ResourceId = "resourceId",
-            Operation = "operation",
-            ResourceType = nameof(CustomsDeclarationEvent),
-        };
-
-        var message = new Message { Body = resourceEvent.ToJson(), MessageId = "1" };
-
-        var context = new MessageContext
-        {
-            Message = message,
-            QueueUrl = "queue",
-            ConsumerType = typeof(FinalisationConsumer),
-        };
-
-        // Act & Assert
-        var ex = await Assert.ThrowsAsync<QuantityReleaseFailureException>(async () =>
-            await consumer.ConsumeAsync(context, TestContext.Current.CancellationToken)
-        );
-
-        ex.Mrn.Should().Be(mrn);
-        ex.Ched.Should().Be(ched);
-    }
-
-    [Fact]
-    public async Task ConsumeAsync_DoesNotThrow_WhenReleaseSucceeds()
-    {
-        // Arrange
-        var mrn = "25GBVLKTCO0HN7MUA4";
-        var ched = "CHEDA.GB.2026.1234567";
-
-        var tracesClient = Substitute.For<ITracesGatewayChedClient>();
-        tracesClient
-            .ReleaseChedReservation(Arg.Any<string>(), Arg.Any<string>(), TestContext.Current.CancellationToken)
-            .Returns(Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)));
-
-        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<FinalisationConsumer>>();
-
-        var consumer = new FinalisationConsumer(logger, tracesClient);
-
-        var customsEvent = new CustomsDeclarationEvent
-        {
-            Id = mrn,
-            Finalisation = new Finalisation
-            {
-                ExternalVersion = 1,
-                FinalState = ResourceEvents.FinalState.Cleared,
-                IsManualRelease = false,
-            },
-            ClearanceRequest = new ClearanceRequest
-            {
-                Commodities = new[]
-                {
-                    new Commodity
-                    {
-                        Documents = new[]
-                        {
-                            new ImportDocument
-                            {
-                                DocumentCode = "9115",
-                                DocumentReference = new ImportDocumentReference(ched),
-                            },
-                        },
-                    },
-                },
+                ],
             },
         };
 
@@ -148,12 +75,171 @@ public class FinalisationConsumerTests
         };
 
         // Act
-        var ex = await Record.ExceptionAsync(async () =>
-            await consumer.ConsumeAsync(context, TestContext.Current.CancellationToken)
-        );
+        await consumer.ConsumeAsync(context, TestContext.Current.CancellationToken);
+
+        // Verify release was attempted and a warning was logged
+        await tracesClient.Received(1).ReleaseChedReservation(ched, mrn, TestContext.Current.CancellationToken);
+
+        var expectedMessage =
+            $"Releasing goods for MRN {mrn} - CHED {ched} returned response code {HttpStatusCode.InternalServerError}";
+
+        logger
+            .Received(1)
+            .Log(
+                Microsoft.Extensions.Logging.LogLevel.Warning,
+                Arg.Any<Microsoft.Extensions.Logging.EventId>(),
+                Arg.Is<object>(o => (o != null ? o.ToString() : string.Empty) == expectedMessage),
+                Arg.Any<Exception>(),
+                Arg.Any<Func<object, Exception?, string>>()
+            );
+    }
+
+    [Fact]
+    public async Task ConsumeAsync_DoesNotThrow_WhenReleaseSucceeds()
+    {
+        // Arrange
+        var mrn = "25GBVLKTCO0HN7MUA4";
+        var ched = "CHEDA.GB.2026.1234567";
+
+        var tracesClient = Substitute.For<ITracesGatewayChedClient>();
+        tracesClient
+            .ReleaseChedReservation(Arg.Any<string>(), Arg.Any<string>(), TestContext.Current.CancellationToken)
+            .Returns(Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)));
+
+        var logger = Substitute.For<ILogger<FinalisationConsumer>>();
+
+        var consumer = new FinalisationConsumer(logger, tracesClient);
+
+        var customsEvent = new CustomsDeclarationEvent
+        {
+            Id = mrn,
+            Finalisation = new Finalisation
+            {
+                ExternalVersion = 1,
+                FinalState = FinalState.Cleared,
+                IsManualRelease = false,
+            },
+            ClearanceRequest = new ClearanceRequest
+            {
+                Commodities =
+                [
+                    new Commodity
+                    {
+                        Documents =
+                        [
+                            new ImportDocument
+                            {
+                                DocumentCode = "9115",
+                                DocumentReference = new ImportDocumentReference(ched),
+                            },
+                        ],
+                    },
+                ],
+            },
+        };
+
+        var resourceEvent = new ResourceEvent<CustomsDeclarationEvent>
+        {
+            Resource = customsEvent,
+            ResourceId = "resourceId",
+            Operation = "operation",
+            ResourceType = nameof(CustomsDeclarationEvent),
+        };
+
+        var message = new Message { Body = resourceEvent.ToJson(), MessageId = "1" };
+
+        var context = new MessageContext
+        {
+            Message = message,
+            QueueUrl = "queue",
+            ConsumerType = typeof(FinalisationConsumer),
+        };
+
+        // Act
+        await consumer.ConsumeAsync(context, TestContext.Current.CancellationToken);
 
         // Assert
-        ex.Should().BeNull();
         await tracesClient.Received(1).ReleaseChedReservation(ched, mrn, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task ConsumeAsync_LogsWarning_WhenDeleteFails()
+    {
+        // Arrange
+        var mrn = "25GBVLKTCO0HN7MUA4";
+        var ched = "CHEDA.GB.2026.9876543";
+
+        var tracesClient = Substitute.For<ITracesGatewayChedClient>();
+        tracesClient
+            .DeleteChedReservation(Arg.Any<string>(), Arg.Any<string>(), TestContext.Current.CancellationToken)
+            .Returns(Task.FromResult(new HttpResponseMessage(HttpStatusCode.InternalServerError)));
+
+        var logger = Substitute.For<ILogger<FinalisationConsumer>>();
+
+        var consumer = new FinalisationConsumer(logger, tracesClient);
+
+        var customsEvent = new CustomsDeclarationEvent
+        {
+            Id = mrn,
+            Finalisation = new Finalisation
+            {
+                ExternalVersion = 1,
+                FinalState = FinalState.CancelledAfterArrival,
+                IsManualRelease = false,
+            },
+            ClearanceRequest = new ClearanceRequest
+            {
+                Commodities =
+                [
+                    new Commodity
+                    {
+                        Documents =
+                        [
+                            new ImportDocument
+                            {
+                                DocumentCode = "9115",
+                                DocumentReference = new ImportDocumentReference(ched),
+                            },
+                        ],
+                    },
+                ],
+            },
+        };
+
+        var resourceEvent = new ResourceEvent<CustomsDeclarationEvent>
+        {
+            Resource = customsEvent,
+            ResourceId = "resourceId",
+            Operation = "operation",
+            ResourceType = nameof(CustomsDeclarationEvent),
+        };
+
+        var message = new Message { Body = resourceEvent.ToJson(), MessageId = "1" };
+
+        var context = new MessageContext
+        {
+            Message = message,
+            QueueUrl = "queue",
+            ConsumerType = typeof(FinalisationConsumer),
+        };
+
+        // Act
+        await consumer.ConsumeAsync(context, TestContext.Current.CancellationToken);
+
+        // Assert
+        await tracesClient.Received(1).DeleteChedReservation(ched, mrn, TestContext.Current.CancellationToken);
+
+        var expectedMessage =
+            $"Deleting reservation for MRN {mrn} - CHED {ched} returned response code {HttpStatusCode.InternalServerError}";
+
+        logger
+            .Received(1)
+            .Log(
+                Microsoft.Extensions.Logging.LogLevel.Warning,
+                Arg.Any<Microsoft.Extensions.Logging.EventId>(),
+                Arg.Is<object>(o => (o != null ? o.ToString() : string.Empty) == expectedMessage),
+                Arg.Any<Exception>(),
+                Arg.Any<Func<object, Exception?, string>>()
+            );
     }
 }

@@ -1,9 +1,6 @@
 using Defra.TradeImportsDataApi.Domain.Events;
-using Infrastructure;
 using Infrastructure.Messaging.Consuming;
-using Microsoft.Net.Http.Headers;
 using Trade.Gateway.Api.Client.Clients;
-using TradeImportsQuantityMgmt.Exceptions;
 
 namespace TradeImportsQuantityMgmt.Features.ResourceEvents
 {
@@ -38,7 +35,7 @@ namespace TradeImportsQuantityMgmt.Features.ResourceEvents
                     foreach (var chedReference in chedReferences)
                     {
                         logger.LogInformation(
-                            "Reserving and releasing goods for MRN {MovementReferenceNumber} - CHED {Ched}",
+                            "Releasing goods for MRN {MovementReferenceNumber} - CHED {Ched}",
                             movementReferenceNumber,
                             chedReference
                         );
@@ -51,7 +48,12 @@ namespace TradeImportsQuantityMgmt.Features.ResourceEvents
 
                         if (!response.IsSuccessStatusCode)
                         {
-                            throw new QuantityReleaseFailureException(movementReferenceNumber, chedReference);
+                            logger.LogWarning(
+                                "Releasing goods for MRN {MovementReferenceNumber} - CHED {Ched} returned response code {ResponseCode}",
+                                movementReferenceNumber,
+                                chedReference,
+                                response.StatusCode
+                            );
                         }
                     }
                     break;
@@ -59,7 +61,10 @@ namespace TradeImportsQuantityMgmt.Features.ResourceEvents
                 case FinalState.CancelledAfterArrival:
                 case FinalState.CancelledWhilePreLodged:
 
-                    logger.LogInformation("Clearing goods for MRN {MovementReferenceNumber}", movementReferenceNumber);
+                    logger.LogInformation(
+                        "Deleting reservation for MRN {MovementReferenceNumber}",
+                        movementReferenceNumber
+                    );
                     foreach (var chedReference in chedReferences)
                     {
                         var response = await tracesGatewayChedClient.DeleteChedReservation(
@@ -70,7 +75,12 @@ namespace TradeImportsQuantityMgmt.Features.ResourceEvents
 
                         if (!response.IsSuccessStatusCode)
                         {
-                            throw new QuantityCancellationFailureException(movementReferenceNumber, chedReference);
+                            logger.LogWarning(
+                                "Deleting reservation for MRN {MovementReferenceNumber} - CHED {Ched} returned response code {ResponseCode}",
+                                movementReferenceNumber,
+                                chedReference,
+                                response.StatusCode
+                            );
                         }
                     }
                     break;
