@@ -23,6 +23,7 @@ public static class CdpLogging
         if (traceIdHeader != null)
         {
             config.Enrich.WithCorrelationId(traceIdHeader);
+            config.Enrich.WithTraceId(traceIdHeader);
         }
 
         var auditLogger = AuditLogger.CreateAuditLogger();

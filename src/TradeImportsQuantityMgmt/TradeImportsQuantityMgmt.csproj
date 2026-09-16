@@ -38,4 +38,7 @@
     <ProjectReference Include="..\Infrastructure\Infrastructure.csproj" />
     <ProjectReference Include="..\TradeImportsQuantityMgmt.Contract\TradeImportsQuantityMgmt.Contract.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="TradeImportsQuantityMgmt.Tests" />
+  </ItemGroup>
 </Project>
