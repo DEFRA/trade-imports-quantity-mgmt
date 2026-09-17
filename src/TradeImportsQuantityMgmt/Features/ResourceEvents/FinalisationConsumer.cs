@@ -28,7 +28,8 @@ public class FinalisationConsumer(
             return;
         }
 
-        var chedReferences = message.Resource.ClearanceRequest.GetTracesCheds().ToArray();
+        var response = await tradeImportsDataApiClient.GetTracesChedsByMrn(mrn, cancellationToken);
+        var chedReferences = response.Cheds.Select(x => x.Ched.ExchangedDocument.Identifier).ToArray();
 
         if (!chedReferences.Any())
         {

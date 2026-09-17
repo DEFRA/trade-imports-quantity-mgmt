@@ -11,6 +11,7 @@ using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Refit;
 using Trade.Gateway.Api.Client.Clients;
+using Trade.Gateway.Api.Contract.Certificate;
 using Trade.Gateway.Api.Contract.Customs;
 using TradeImportsQuantityMgmt.Features.ResourceEvents;
 using TradeImportsQuantityMgmt.Mappings;
@@ -43,6 +44,8 @@ public class FinalisationConsumerTests
         tracesClient
             .ReleaseChedReservation(Arg.Any<string>(), Arg.Any<string>(), TestContext.Current.CancellationToken)
             .Returns(Task.FromResult(new HttpResponseMessage(HttpStatusCode.InternalServerError)));
+
+        StubTracesChedsByMrn(dataApiClient, mrn, ched);
 
         var logger = Substitute.For<ILogger<FinalisationConsumer>>();
 
@@ -136,6 +139,8 @@ public class FinalisationConsumerTests
         tracesClient
             .DeleteChedReservation(Arg.Any<string>(), Arg.Any<string>(), TestContext.Current.CancellationToken)
             .Returns(Task.FromResult(new HttpResponseMessage(HttpStatusCode.InternalServerError)));
+
+        StubTracesChedsByMrn(dataApiClient, mrn, ched);
 
         var logger = Substitute.For<ILogger<FinalisationConsumer>>();
 
@@ -283,6 +288,8 @@ public class FinalisationConsumerTests
                 )
             );
 
+        StubTracesChedsByMrn(dataApiClient, mrn, ched);
+
         Reservation? capturedReservation = null;
         dataApiClient
             .PutChedReservation(
@@ -367,6 +374,8 @@ public class FinalisationConsumerTests
                 )
             );
 
+        StubTracesChedsByMrn(dataApiClient, mrn, ched);
+
         string? deletedChed = null;
         string? deletedMrn = null;
         dataApiClient
@@ -400,6 +409,30 @@ public class FinalisationConsumerTests
 
         deletedChed.Should().Be(ched);
         deletedMrn.Should().Be(mrn);
+    }
+
+    private static void StubTracesChedsByMrn(
+        ITradeImportsDataApiClient dataApiClient,
+        string mrn,
+        params string[] chedReferences
+    )
+    {
+        var response = new TracesChedsResponse(
+            chedReferences
+                .Select(ched => new TracesChedResponse(
+                    new DefraUNVTDCHEDProfile
+                    {
+                        ExchangedDocument = new ExchangedDocument { Identifier = ched },
+                        SpecifiedConsignment = new Consignment(),
+                    },
+                    DateTime.UtcNow,
+                    DateTime.UtcNow,
+                    null
+                ))
+                .ToArray()
+        );
+
+        dataApiClient.GetTracesChedsByMrn(mrn, Arg.Any<CancellationToken>()).Returns(Task.FromResult(response));
     }
 
     private static MessageContext BuildClearedMessageContext(string mrn, string ched)

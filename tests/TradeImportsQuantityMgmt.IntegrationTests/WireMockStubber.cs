@@ -16,6 +16,7 @@ internal static class WireMockStubber
         "data-api-ched-reservation-put",
         "data-api-ched-reservation-delete",
         "data-api-ched-reservation-get",
+        "data-api-traces-cheds-by-mrn",
     ];
 
     public static async Task StubChedReleaseAsync(
@@ -152,6 +153,40 @@ internal static class WireMockStubber
             },
             cancellationToken
         );
+    }
+
+    /// <summary>
+    /// Stubs the Data API's lookup of the Traces CHEDs held against a declaration, which the
+    /// consumer now uses instead of the CHED references embedded in the resource event body.
+    /// </summary>
+    public static async Task StubDataApiTracesChedsByMrnAsync(
+        string wireMockBaseUrl,
+        string mrn,
+        params string[] chedReferences
+    )
+    {
+        using var http = new HttpClient { BaseAddress = new Uri(wireMockBaseUrl) };
+
+        var mapping = new
+        {
+            priority = 1,
+            request = new { method = "GET", urlPath = $"/customs-declarations/{mrn}/traces-cheds" },
+            response = new
+            {
+                status = (int)HttpStatusCode.OK,
+                jsonBody = new
+                {
+                    cheds = chedReferences.Select(ched => new
+                    {
+                        ched = new { exchangedDocument = new { identifier = ched }, specifiedConsignment = new { } },
+                        created = DateTime.UtcNow,
+                        updated = DateTime.UtcNow,
+                    }),
+                },
+            },
+        };
+
+        await PostMappingAsync(http, "data-api-traces-cheds-by-mrn", mapping, CancellationToken.None);
     }
 
     public static async Task StubDataApiChedReservationDeleteAsync(
