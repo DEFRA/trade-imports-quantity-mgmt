@@ -1,5 +1,6 @@
 using System.Net;
 using Amazon.SQS.Model;
+using AwesomeAssertions;
 using Defra.TradeImportsDataApi.Api.Client;
 using Defra.TradeImportsDataApi.Domain.CustomsDeclaration;
 using Defra.TradeImportsDataApi.Domain.Events;
@@ -282,6 +283,17 @@ public class FinalisationConsumerTests
                 )
             );
 
+        Reservation? capturedReservation = null;
+        dataApiClient
+            .PutChedReservation(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Do<Reservation>(r => capturedReservation = r),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(Task.CompletedTask);
+
         var logger = Substitute.For<ILogger<FinalisationConsumer>>();
         var consumer = new FinalisationConsumer(logger, tracesClient, dataApiClient);
 
@@ -290,20 +302,18 @@ public class FinalisationConsumerTests
         // Act
         await consumer.ConsumeAsync(context, TestContext.Current.CancellationToken);
 
-        // Assert: only this declaration's consumed allocation was persisted, at "Consumed" status.
+        // Assert: the write targeted this declaration, and only its consumed allocation was
+        // persisted, at "Consumed" status - not the other declaration's reserved allocation.
         await dataApiClient
             .Received(1)
-            .PutChedReservation(
-                ched,
-                mrn,
-                Arg.Is<Reservation>(r =>
-                    r.Status == ReservationStatus.Consumed
-                    && r.Commodities.Length == 1
-                    && r.Commodities[0].Quantity == 300m
-                ),
-                null,
-                TestContext.Current.CancellationToken
-            );
+            .PutChedReservation(ched, mrn, Arg.Any<Reservation>(), null, TestContext.Current.CancellationToken);
+
+        capturedReservation.Should().NotBeNull();
+        capturedReservation!.ChedId.Should().Be(ched);
+        capturedReservation.Mrn.Should().Be(mrn);
+        capturedReservation.Status.Should().Be(ReservationStatus.Consumed);
+        capturedReservation.Commodities.Should().ContainSingle();
+        capturedReservation.Commodities[0].Quantity.Should().Be(300m);
     }
 
     [Fact]
@@ -357,6 +367,16 @@ public class FinalisationConsumerTests
                 )
             );
 
+        string? deletedChed = null;
+        string? deletedMrn = null;
+        dataApiClient
+            .DeleteChedReservation(
+                Arg.Do<string>(c => deletedChed = c),
+                Arg.Do<string>(m => deletedMrn = m),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(Task.CompletedTask);
+
         var logger = Substitute.For<ILogger<FinalisationConsumer>>();
         var consumer = new FinalisationConsumer(logger, tracesClient, dataApiClient);
 
@@ -365,7 +385,8 @@ public class FinalisationConsumerTests
         // Act
         await consumer.ConsumeAsync(context, TestContext.Current.CancellationToken);
 
-        // Assert: no misleading "Unreserved" record is written; any existing record is removed instead.
+        // Assert: no misleading "Unreserved" record is written; any existing record is removed instead,
+        // targeting this declaration specifically.
         await dataApiClient.Received(1).DeleteChedReservation(ched, mrn, TestContext.Current.CancellationToken);
         await dataApiClient
             .DidNotReceive()
@@ -376,6 +397,9 @@ public class FinalisationConsumerTests
                 Arg.Any<string?>(),
                 Arg.Any<CancellationToken>()
             );
+
+        deletedChed.Should().Be(ched);
+        deletedMrn.Should().Be(mrn);
     }
 
     private static MessageContext BuildClearedMessageContext(string mrn, string ched)
