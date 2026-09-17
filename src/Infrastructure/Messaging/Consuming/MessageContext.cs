@@ -25,4 +25,9 @@ public class MessageContext
     {
         return GetHeader(MetricNames.TraceKey) ?? Guid.NewGuid().ToString("N");
     }
+
+    public string GetResourceId()
+    {
+        return GetHeader("ResourceId") ?? string.Empty;
+    }
 }

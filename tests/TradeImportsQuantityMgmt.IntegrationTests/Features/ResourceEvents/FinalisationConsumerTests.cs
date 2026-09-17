@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net;
 using System.Text.Json;
 using Amazon.Runtime;
 using Amazon.SQS;
@@ -72,6 +73,7 @@ public class FinalisationConsumerTests(TradeGatewayWebApplicationFactory factory
                 DataType = "String",
                 StringValue = nameof(Finalisation),
             },
+            ["ResourceId"] = new MessageAttributeValue { DataType = "String", StringValue = Mrn },
         };
 
         await _sqsClient.SendMessageAsync(
@@ -115,6 +117,17 @@ public class FinalisationConsumerTests(TradeGatewayWebApplicationFactory factory
 
         await WireMockStubber.ResetAsync(factory.WireMockBaseUrl);
         await WireMockStubber.StubChedReleaseAsync(factory.WireMockBaseUrl, Mrn, Ched, CancellationToken.None);
+
+        // The consumer also syncs the reservation state to the Data API after releasing goods; since the
+        // Traces Gateway quantities lookup is unstubbed (404), no allocations are returned and the consumer
+        // falls back to deleting the reservation in the Data API.
+        await WireMockStubber.StubDataApiChedReservationDeleteAsync(
+            factory.WireMockBaseUrl,
+            Ched,
+            Mrn,
+            HttpStatusCode.NoContent,
+            CancellationToken.None
+        );
 
         await Task.Delay(100, _cancellationToken);
     }

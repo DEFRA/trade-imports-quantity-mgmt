@@ -1,12 +1,11 @@
 using System.Diagnostics.CodeAnalysis;
-using System.Text.Json;
 using Defra.TradeImports.Api.Metrics;
 using Defra.TradeImports.EmfExporter;
 using Defra.TradeImports.Tracing;
+using Defra.TradeImportsDataApi.Api.Client;
 using FluentValidation;
 using Infrastructure;
 using Infrastructure.Messaging.Extensions;
-using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi;
@@ -119,6 +118,22 @@ static void ConfigureHttpClients(IServiceCollection services, IConfiguration con
             var traceContextAccessor = sp.GetRequiredService<ITraceContextAccessor>();
             return traceContextAccessor.Context?.TraceId ?? Guid.CreateVersion7().ToString("N");
         });
+
+    services
+        .AddOptions<DataApiOptions>()
+        .Bind(configuration.GetSection(DataApiOptions.SectionName))
+        .ValidateDataAnnotations()
+        .ValidateOnStart();
+
+    services
+        .AddTradeImportsDataApiClient()
+        .ConfigureHttpClient(
+            (sp, c) =>
+            {
+                sp.GetRequiredService<IOptions<DataApiOptions>>().Value.Configure(c);
+            }
+        )
+        .AddHeaderPropagation();
 
     // Default HTTP Client
     services.AddHttpClient("DefaultClient").AddHeaderPropagation();

@@ -1,3 +1,5 @@
+using Defra.TradeImportsDataApi.Api.Client;
+using Defra.TradeImportsDataApi.Domain.Traces;
 using Trade.Gateway.Api.Client.Clients;
 using TradeImportsQuantityMgmt.Contract;
 using TradeImportsQuantityMgmt.Filters;
@@ -36,6 +38,7 @@ public static class QuantityEndpoints
         string mrn,
         ChedReservationRequest request,
         ITracesGatewayChedClient tracesGatewayChedClient,
+        ITradeImportsDataApiClient tradeImportsDataApiClient,
         CancellationToken cancellationToken
     )
     {
@@ -44,6 +47,12 @@ public static class QuantityEndpoints
 
         if (response.IsSuccessful)
         {
+            //send the reservation record to the data-api
+            var etag = await GetEtag(chedId, mrn, tradeImportsDataApiClient, cancellationToken);
+
+            var reservation = response.Content.ToReservationForDataApi(chedId, mrn);
+            await tradeImportsDataApiClient.PutChedReservation(chedId, mrn, reservation, etag, cancellationToken);
+
             return Results.Json(
                 response.Content?.ToApiContract(),
                 contentType: MediaTypeAttribute.For<ChedDeclarationReservation>()
@@ -54,5 +63,27 @@ public static class QuantityEndpoints
             statusCode: response.StatusCode != null ? (int)response.StatusCode : 500,
             detail: response.Error.Message
         );
+    }
+
+    private static async Task<string?> GetEtag(
+        string chedId,
+        string mrn,
+        ITradeImportsDataApiClient tradeImportsDataApiClient,
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            var existingReservation = await tradeImportsDataApiClient.GetChedReservation(
+                chedId,
+                mrn,
+                cancellationToken
+            );
+            return existingReservation?.ETag;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 }

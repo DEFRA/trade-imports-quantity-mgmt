@@ -1,12 +1,15 @@
 using System.Net;
 using Amazon.SQS.Model;
+using Defra.TradeImportsDataApi.Api.Client;
 using Defra.TradeImportsDataApi.Domain.CustomsDeclaration;
 using Defra.TradeImportsDataApi.Domain.Events;
 using Infrastructure;
 using Infrastructure.Messaging.Consuming;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
+using Refit;
 using Trade.Gateway.Api.Client.Clients;
+using Trade.Gateway.Api.Contract.Customs;
 using TradeImportsQuantityMgmt.Features.ResourceEvents;
 
 namespace TradeImportsQuantityMgmt.Tests;
@@ -20,14 +23,27 @@ public class FinalisationConsumerTests
         var mrn = "25GBVLKTCO0HN7MUA4";
         var ched = "CHEDA.GB.2026.1234567";
 
+        var dataApiClient = Substitute.For<ITradeImportsDataApiClient>();
         var tracesClient = Substitute.For<ITracesGatewayChedClient>();
+        tracesClient
+            .GetChedQuantities(ched, TestContext.Current.CancellationToken)
+            .Returns(
+                Task.FromResult(
+                    new ApiResponse<ChedQuantityLedger>(
+                        new HttpResponseMessage(HttpStatusCode.InternalServerError),
+                        null!,
+                        new RefitSettings()
+                    )
+                )
+            );
+
         tracesClient
             .ReleaseChedReservation(Arg.Any<string>(), Arg.Any<string>(), TestContext.Current.CancellationToken)
             .Returns(Task.FromResult(new HttpResponseMessage(HttpStatusCode.InternalServerError)));
 
         var logger = Substitute.For<ILogger<FinalisationConsumer>>();
 
-        var consumer = new FinalisationConsumer(logger, tracesClient);
+        var consumer = new FinalisationConsumer(logger, tracesClient, dataApiClient);
 
         var customsEvent = new CustomsDeclarationEvent
         {
@@ -65,7 +81,18 @@ public class FinalisationConsumerTests
             ResourceType = nameof(CustomsDeclarationEvent),
         };
 
-        var message = new Message { Body = resourceEvent.ToJson(), MessageId = "1" };
+        var message = new Message
+        {
+            Body = resourceEvent.ToJson(),
+            MessageId = "1",
+            MessageAttributes = new Dictionary<string, MessageAttributeValue>()
+            {
+                {
+                    "ResourceId",
+                    new MessageAttributeValue() { StringValue = mrn }
+                },
+            },
+        };
 
         var context = new MessageContext
         {
@@ -101,6 +128,7 @@ public class FinalisationConsumerTests
         var mrn = "25GBVLKTCO0HN7MUA4";
         var ched = "CHEDA.GB.2026.9876543";
 
+        var dataApiClient = Substitute.For<ITradeImportsDataApiClient>();
         var tracesClient = Substitute.For<ITracesGatewayChedClient>();
         tracesClient
             .DeleteChedReservation(Arg.Any<string>(), Arg.Any<string>(), TestContext.Current.CancellationToken)
@@ -108,7 +136,7 @@ public class FinalisationConsumerTests
 
         var logger = Substitute.For<ILogger<FinalisationConsumer>>();
 
-        var consumer = new FinalisationConsumer(logger, tracesClient);
+        var consumer = new FinalisationConsumer(logger, tracesClient, dataApiClient);
 
         var customsEvent = new CustomsDeclarationEvent
         {
@@ -146,7 +174,18 @@ public class FinalisationConsumerTests
             ResourceType = nameof(CustomsDeclarationEvent),
         };
 
-        var message = new Message { Body = resourceEvent.ToJson(), MessageId = "1" };
+        var message = new Message
+        {
+            Body = resourceEvent.ToJson(),
+            MessageId = "1",
+            MessageAttributes = new Dictionary<string, MessageAttributeValue>()
+            {
+                {
+                    "ResourceId",
+                    new MessageAttributeValue() { StringValue = mrn }
+                },
+            },
+        };
 
         var context = new MessageContext
         {
@@ -179,10 +218,11 @@ public class FinalisationConsumerTests
     public async Task ConsumeAsync_LogsWarning_WhenResourceIsNull()
     {
         // Arrange
+        var dataApiClient = Substitute.For<ITradeImportsDataApiClient>();
         var tracesClient = Substitute.For<ITracesGatewayChedClient>();
         var logger = Substitute.For<ILogger<FinalisationConsumer>>();
 
-        var consumer = new FinalisationConsumer(logger, tracesClient);
+        var consumer = new FinalisationConsumer(logger, tracesClient, dataApiClient);
 
         var resourceEvent = new ResourceEvent<CustomsDeclarationEvent>
         {
@@ -191,6 +231,8 @@ public class FinalisationConsumerTests
             Operation = "operation",
             ResourceType = nameof(CustomsDeclarationEvent),
         };
+
+        var mrn = "25GBVLKTCO0HN7MUA4";
 
         var message = new Message
         {
@@ -205,6 +247,8 @@ public class FinalisationConsumerTests
             StringValue = "{11111111-1111-1111-1111-111111111111}",
         };
 
+        message.MessageAttributes["ResourceId"] = new MessageAttributeValue { DataType = "String", StringValue = mrn };
+
         var context = new MessageContext
         {
             Message = message,
@@ -216,7 +260,7 @@ public class FinalisationConsumerTests
         await consumer.ConsumeAsync(context, TestContext.Current.CancellationToken);
 
         // Assert: a warning should be logged indicating deserialisation
-        var expectedMessage = "Message for trace {11111111-1111-1111-1111-111111111111} could not be deserialised";
+        var expectedMessage = $"Message for MRN {mrn} could not be deserialised";
 
         logger
             .Received(1)

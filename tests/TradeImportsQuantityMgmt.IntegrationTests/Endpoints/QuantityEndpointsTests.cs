@@ -73,6 +73,15 @@ public class QuantityEndpointsTests(TradeGatewayWebApplicationFactory factory, I
             cancellationToken: TestContext.Current.CancellationToken
         );
 
+        // Stub the Data API reservation upsert that the endpoint performs after a successful gateway reservation.
+        await WireMockStubber.StubDataApiChedReservationPutAsync(
+            factory.WireMockBaseUrl,
+            Ched,
+            Mrn,
+            HttpStatusCode.OK,
+            TestContext.Current.CancellationToken
+        );
+
         var response = await factory
             .CreateQuantityManagementClient()
             .PutChedReservation(Ched, Mrn, ValidRequest(), TestContext.Current.CancellationToken);

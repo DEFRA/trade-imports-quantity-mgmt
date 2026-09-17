@@ -13,6 +13,8 @@ internal static class WireMockStubber
         "ched-reservation-release",
         "ched-reservation-delete",
         "ched-reservation-put",
+        "data-api-ched-reservation-put",
+        "data-api-ched-reservation-delete",
     ];
 
     public static async Task StubChedReleaseAsync(
@@ -82,6 +84,52 @@ internal static class WireMockStubber
         };
 
         await PostMappingAsync(http, "ched-reservation-put", mapping, cancellationToken);
+    }
+
+    public static async Task StubDataApiChedReservationPutAsync(
+        string wireMockBaseUrl,
+        string ched,
+        string mrn,
+        HttpStatusCode status,
+        CancellationToken cancellationToken = default
+    )
+    {
+        using var http = new HttpClient { BaseAddress = new Uri(wireMockBaseUrl) };
+
+        await PostMappingAsync(
+            http,
+            "data-api-ched-reservation-put",
+            new
+            {
+                priority = 1,
+                request = new { method = "PUT", urlPath = $"/traces-cheds/{ched}/reservation/{mrn}" },
+                response = new { status = (int)status },
+            },
+            cancellationToken
+        );
+    }
+
+    public static async Task StubDataApiChedReservationDeleteAsync(
+        string wireMockBaseUrl,
+        string ched,
+        string mrn,
+        HttpStatusCode status,
+        CancellationToken cancellationToken = default
+    )
+    {
+        using var http = new HttpClient { BaseAddress = new Uri(wireMockBaseUrl) };
+
+        await PostMappingAsync(
+            http,
+            "data-api-ched-reservation-delete",
+            new
+            {
+                priority = 1,
+                request = new { method = "DELETE", urlPath = $"/traces-cheds/{ched}/reservation/{mrn}" },
+                response = new { status = (int)status },
+            },
+            cancellationToken
+        );
     }
 
     public static async Task ResetAsync(string wireMockBaseUrl, CancellationToken cancellationToken = default)
