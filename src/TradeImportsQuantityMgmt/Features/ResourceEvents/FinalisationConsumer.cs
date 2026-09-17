@@ -1,8 +1,11 @@
 using Defra.TradeImportsDataApi.Api.Client;
+using Defra.TradeImportsDataApi.Domain.CustomsDeclaration;
 using Defra.TradeImportsDataApi.Domain.Events;
+using Defra.TradeImportsDataApi.Domain.Traces;
 using Infrastructure.Messaging.Consuming;
 using Trade.Gateway.Api.Client.Clients;
 using TradeImportsQuantityMgmt.Mappings;
+using TradeImportsQuantityMgmt.Utils;
 
 namespace TradeImportsQuantityMgmt.Features.ResourceEvents;
 
@@ -97,23 +100,21 @@ public class FinalisationConsumer(
     )
     {
         var tracesReservation = await tracesGatewayChedClient.GetChedQuantities(chedReference, cancellationToken);
-        var etag = await GetEtag(chedReference, mrn, tradeImportsDataApiClient, cancellationToken);
+        var allocations = tracesReservation.Content?.Allocations;
 
-        if (tracesReservation.Content?.Allocations != null)
+        // No allocations for this CHED at all, or none left for this declaration once the
+        // whole-CHED ledger is narrowed down to this MRN: nothing to reserve, so the record
+        // (if any) should be removed rather than persisted as an empty "Unreserved" write.
+        var reservation = allocations?.ToReservationForDataApi(chedReference, mrn);
+
+        if (reservation is null || reservation.Status == ReservationStatus.Unreserved)
         {
-            var reservation = tracesReservation.Content.Allocations.ToReservationForDataApi(chedReference, mrn);
-            await tradeImportsDataApiClient.PutChedReservation(
-                chedReference,
-                mrn,
-                reservation,
-                etag,
-                cancellationToken
-            );
+            await tradeImportsDataApiClient.DeleteChedReservation(chedReference, mrn, cancellationToken);
+            return;
         }
-        else
-        {
-            await tradeImportsDataApiClient.DeleteChedReservation(chedReference, mrn, null!, cancellationToken);
-        }
+
+        var etag = await tradeImportsDataApiClient.GetChedReservationETag(chedReference, mrn, cancellationToken);
+        await tradeImportsDataApiClient.PutChedReservation(chedReference, mrn, reservation, etag, cancellationToken);
     }
 
     private async Task ProcessCancellationAsync(
@@ -145,28 +146,6 @@ public class FinalisationConsumer(
             return;
         }
 
-        await tradeImportsDataApiClient.DeleteChedReservation(chedReference, mrn, null!, cancellationToken);
-    }
-
-    private static async Task<string?> GetEtag(
-        string chedId,
-        string mrn,
-        ITradeImportsDataApiClient tradeImportsDataApiClient,
-        CancellationToken cancellationToken
-    )
-    {
-        try
-        {
-            var existingReservation = await tradeImportsDataApiClient.GetChedReservation(
-                chedId,
-                mrn,
-                cancellationToken
-            );
-            return existingReservation?.ETag;
-        }
-        catch (Exception)
-        {
-            return null;
-        }
+        await tradeImportsDataApiClient.DeleteChedReservation(chedReference, mrn, cancellationToken);
     }
 }

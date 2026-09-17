@@ -10,7 +10,6 @@ using Defra.TradeImportsDataApi.Domain.Events;
 using Defra.TradeImportsDataApi.Domain.Ipaffs;
 using NSubstitute;
 using NSubstitute.ClearExtensions;
-using ResourceEventFinalState = TradeImportsQuantityMgmt.Features.ResourceEvents.FinalState;
 
 namespace TradeImportsQuantityMgmt.IntegrationTests.Features.ResourceEvents;
 
@@ -44,7 +43,7 @@ public class FinalisationConsumerTests(TradeGatewayWebApplicationFactory factory
             Finalisation = new Finalisation
             {
                 ExternalVersion = 1,
-                FinalState = ResourceEventFinalState.Cleared,
+                FinalState = FinalState.Cleared,
                 IsManualRelease = false,
             },
             ClearanceRequest = new ClearanceRequest

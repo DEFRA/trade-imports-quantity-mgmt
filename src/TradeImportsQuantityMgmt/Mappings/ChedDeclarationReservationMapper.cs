@@ -1,15 +1,9 @@
 using Defra.TradeImportsDataApi.Domain.Traces;
 using TradeImportsQuantityMgmt.Contract;
 using AllocatedCommodityQuantity = Trade.Gateway.Api.Contract.Customs.AllocatedCommodityQuantity;
+using DeclarationReferenceType = Trade.Gateway.Api.Contract.Customs.DeclarationReferenceType;
 
 namespace TradeImportsQuantityMgmt.Mappings;
-
-public static class ReservationStatus
-{
-    public const string Unreserved = nameof(Unreserved);
-    public const string Reserved = nameof(Reserved);
-    public const string Consumed = nameof(Consumed);
-}
 
 public static class ChedDeclarationReservationMapper
 {
@@ -30,16 +24,39 @@ public static class ChedDeclarationReservationMapper
         string mrn
     )
     {
-        return ToReservationForDataApi(chedId, mrn, source.Reserved, source.Consumed);
+        return ToReservationForDataApi(chedId, mrn, source.Reserved ?? [], source.Consumed ?? []);
     }
 
+    /// <remarks>
+    /// <paramref name="source"/> is the whole-CHED ledger: every declaration's allocations against
+    /// this CHED, not just this MRN's. It must be filtered down to <paramref name="mrn"/> before
+    /// mapping, otherwise another declaration's reservation/consumption on the same CHED can be
+    /// persisted as this one's.
+    /// </remarks>
     public static Reservation ToReservationForDataApi(
         this Trade.Gateway.Api.Contract.Customs.QuantityAllocations source,
         string chedId,
         string mrn
     )
     {
-        return ToReservationForDataApi(chedId, mrn, source.Reserved, source.Consumed);
+        return ToReservationForDataApi(
+            chedId,
+            mrn,
+            FilterByMrn(source.Reserved, mrn),
+            FilterByMrn(source.Consumed, mrn)
+        );
+    }
+
+    private static AllocatedCommodityQuantity[] FilterByMrn(AllocatedCommodityQuantity[]? source, string mrn)
+    {
+        if (source is null)
+            return [];
+
+        return source
+            .Where(x =>
+                x.DeclarationReference is { Type: DeclarationReferenceType.Mrn } reference && reference.Value == mrn
+            )
+            .ToArray();
     }
 
     private static Reservation ToReservationForDataApi(
@@ -49,51 +66,51 @@ public static class ChedDeclarationReservationMapper
         AllocatedCommodityQuantity[] consumed
     )
     {
-        var s = ReservationStatus.Unreserved;
-        var commodities = Array.Empty<ReservationCommodity>();
-        var ts = DateTimeOffset.UtcNow;
-        if (reserved is not null && reserved.Any())
-        {
-            s = ReservationStatus.Reserved;
-            var dateTimeOffset = reserved[0].EventDateTime;
-            if (dateTimeOffset != null)
-                ts = dateTimeOffset.Value;
-            commodities = reserved
-                .Select(x => new ReservationCommodity()
-                {
-                    CertificateLineNumber = x.CertificateLineNumber.GetValueOrDefault(),
-                    CommodityCode = x.CommodityCode?.TaricCode!,
-                    GoodsItemNumber = x.GoodsItemNumber.GetValueOrDefault(),
-                    Quantity = x.Quantity,
-                    UnitOfMeasure = x.UnitOfMeasure!,
-                })
-                .ToArray();
-        }
-        else if (consumed is not null && consumed.Any())
-        {
-            s = ReservationStatus.Consumed;
-            var dateTimeOffset = consumed[0].EventDateTime;
-            if (dateTimeOffset != null)
-                ts = dateTimeOffset.Value;
-            commodities = consumed
-                .Select(x => new ReservationCommodity()
-                {
-                    CertificateLineNumber = x.CertificateLineNumber.GetValueOrDefault(),
-                    CommodityCode = x.CommodityCode?.TaricCode!,
-                    GoodsItemNumber = x.GoodsItemNumber.GetValueOrDefault(),
-                    Quantity = x.Quantity,
-                    UnitOfMeasure = x.UnitOfMeasure!,
-                })
-                .ToArray();
-        }
+        var (status, allocations) = SelectAllocations(reserved, consumed);
 
         return new Reservation()
         {
             ChedId = chedId,
             Mrn = mrn,
-            Status = s,
-            Timestamp = ts.UtcDateTime,
-            Commodities = commodities,
+            Status = status,
+            Timestamp = LatestEventTimestamp(allocations),
+            Commodities = allocations.Select(ToReservationCommodity).ToArray(),
         };
     }
+
+    private static (string Status, AllocatedCommodityQuantity[] Allocations) SelectAllocations(
+        AllocatedCommodityQuantity[] reserved,
+        AllocatedCommodityQuantity[] consumed
+    )
+    {
+        if (reserved.Any())
+            return (ReservationStatus.Reserved, reserved);
+
+        if (consumed.Any())
+            return (ReservationStatus.Consumed, consumed);
+
+        return (ReservationStatus.Unreserved, []);
+    }
+
+    private static DateTime LatestEventTimestamp(AllocatedCommodityQuantity[] allocations)
+    {
+        var latest = allocations
+            .Select(x => x.EventDateTime)
+            .Where(x => x != null)
+            .Select(x => x!.Value)
+            .DefaultIfEmpty(DateTimeOffset.UtcNow)
+            .Max();
+
+        return latest.UtcDateTime;
+    }
+
+    private static ReservationCommodity ToReservationCommodity(AllocatedCommodityQuantity x) =>
+        new()
+        {
+            CertificateLineNumber = x.CertificateLineNumber.GetValueOrDefault(),
+            CommodityCode = x.CommodityCode?.TaricCode!,
+            GoodsItemNumber = x.GoodsItemNumber.GetValueOrDefault(),
+            Quantity = x.Quantity,
+            UnitOfMeasure = x.UnitOfMeasure!,
+        };
 }

@@ -15,8 +15,9 @@ public class DataApiHealthCheck(DataApiOptions options) : IHealthCheck
     {
         try
         {
-            // This code intentionally does not use the data API client as that includes
-            // header propagation and other concerns that we don't want
+            // This code intentionally uses a plain HttpClient rather than the typed data-API
+            // client, to avoid the header propagation handler that client is registered with
+            // in Program.cs (ConfigureHttpClients)
 
             using var httpClient = new HttpClient();
 
