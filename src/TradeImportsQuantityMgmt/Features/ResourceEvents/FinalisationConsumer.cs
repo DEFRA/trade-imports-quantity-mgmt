@@ -37,97 +37,12 @@ public class FinalisationConsumer(
         switch (message.Resource.Finalisation?.FinalState)
         {
             case FinalState.Cleared when message.Resource.Finalisation?.IsManualRelease is false:
-
-                foreach (var chedReference in chedReferences)
-                {
-                    logger.LogInformation(
-                        "Releasing goods for MRN {MovementReferenceNumber} - CHED {Ched}",
-                        mrn,
-                        chedReference
-                    );
-
-                    var response = await tracesGatewayChedClient.ReleaseChedReservation(
-                        chedReference,
-                        mrn,
-                        cancellationToken
-                    );
-
-                    if (!response.IsSuccessStatusCode)
-                    {
-                        logger.LogWarning(
-                            "Releasing goods for MRN {MovementReferenceNumber} - CHED {Ched} returned response code {ResponseCode}",
-                            mrn,
-                            chedReference,
-                            response.StatusCode
-                        );
-                    }
-                    else
-                    {
-                        var tracesReservation = await tracesGatewayChedClient.GetChedQuantities(
-                            chedReference,
-                            cancellationToken
-                        );
-
-                        var etag = await GetEtag(chedReference, mrn, tradeImportsDataApiClient, cancellationToken);
-
-                        if (tracesReservation.Content?.Allocations != null)
-                        {
-                            var reservation = tracesReservation.Content.Allocations.ToReservationForDataApi(
-                                chedReference,
-                                mrn
-                            );
-                            await tradeImportsDataApiClient.PutChedReservation(
-                                chedReference,
-                                mrn,
-                                reservation,
-                                etag,
-                                cancellationToken
-                            );
-                        }
-                        else
-                        {
-                            await tradeImportsDataApiClient.DeleteChedReservation(
-                                chedReference,
-                                mrn,
-                                null!,
-                                cancellationToken
-                            );
-                        }
-                    }
-                }
+                await ProcessClearanceAsync(chedReferences, mrn, cancellationToken);
                 break;
 
             case FinalState.CancelledAfterArrival:
             case FinalState.CancelledWhilePreLodged:
-
-                logger.LogInformation("Deleting reservation for MRN {Mrn}", mrn);
-                foreach (var chedReference in chedReferences)
-                {
-                    var response = await tracesGatewayChedClient.DeleteChedReservation(
-                        chedReference,
-                        mrn,
-                        cancellationToken
-                    );
-
-                    if (!response.IsSuccessStatusCode)
-                    {
-                        logger.LogWarning(
-                            "Deleting reservation for MRN {MovementReferenceNumber} - CHED {Ched} returned response code {ResponseCode}",
-                            mrn,
-                            chedReference,
-                            response.StatusCode
-                        );
-                    }
-                    else
-                    {
-                        await tradeImportsDataApiClient.DeleteChedReservation(
-                            chedReference,
-                            mrn,
-                            null!,
-                            cancellationToken
-                        );
-                    }
-                }
+                await ProcessCancellationAsync(chedReferences, mrn, cancellationToken);
                 break;
 
             default:
@@ -137,6 +52,100 @@ public class FinalisationConsumer(
                 );
                 break;
         }
+    }
+
+    private async Task ProcessClearanceAsync(
+        IEnumerable<string> chedReferences,
+        string mrn,
+        CancellationToken cancellationToken
+    )
+    {
+        foreach (var chedReference in chedReferences)
+        {
+            await ReleaseChedReservationAsync(chedReference, mrn, cancellationToken);
+        }
+    }
+
+    private async Task ReleaseChedReservationAsync(
+        string chedReference,
+        string mrn,
+        CancellationToken cancellationToken
+    )
+    {
+        logger.LogInformation("Releasing goods for MRN {MovementReferenceNumber} - CHED {Ched}", mrn, chedReference);
+
+        var response = await tracesGatewayChedClient.ReleaseChedReservation(chedReference, mrn, cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            logger.LogWarning(
+                "Releasing goods for MRN {MovementReferenceNumber} - CHED {Ched} returned response code {ResponseCode}",
+                mrn,
+                chedReference,
+                response.StatusCode
+            );
+            return;
+        }
+
+        await SyncReservationWithDataApiAsync(chedReference, mrn, cancellationToken);
+    }
+
+    private async Task SyncReservationWithDataApiAsync(
+        string chedReference,
+        string mrn,
+        CancellationToken cancellationToken
+    )
+    {
+        var tracesReservation = await tracesGatewayChedClient.GetChedQuantities(chedReference, cancellationToken);
+        var etag = await GetEtag(chedReference, mrn, tradeImportsDataApiClient, cancellationToken);
+
+        if (tracesReservation.Content?.Allocations != null)
+        {
+            var reservation = tracesReservation.Content.Allocations.ToReservationForDataApi(chedReference, mrn);
+            await tradeImportsDataApiClient.PutChedReservation(
+                chedReference,
+                mrn,
+                reservation,
+                etag,
+                cancellationToken
+            );
+        }
+        else
+        {
+            await tradeImportsDataApiClient.DeleteChedReservation(chedReference, mrn, null!, cancellationToken);
+        }
+    }
+
+    private async Task ProcessCancellationAsync(
+        IEnumerable<string> chedReferences,
+        string mrn,
+        CancellationToken cancellationToken
+    )
+    {
+        logger.LogInformation("Deleting reservation for MRN {Mrn}", mrn);
+
+        foreach (var chedReference in chedReferences)
+        {
+            await DeleteReservationAsync(chedReference, mrn, cancellationToken);
+        }
+    }
+
+    private async Task DeleteReservationAsync(string chedReference, string mrn, CancellationToken cancellationToken)
+    {
+        var response = await tracesGatewayChedClient.DeleteChedReservation(chedReference, mrn, cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            logger.LogWarning(
+                "Deleting reservation for MRN {MovementReferenceNumber} - CHED {Ched} returned response code {ResponseCode}",
+                mrn,
+                chedReference,
+                response.StatusCode
+            );
+            return;
+        }
+
+        await tradeImportsDataApiClient.DeleteChedReservation(chedReference, mrn, null!, cancellationToken);
     }
 
     private static async Task<string?> GetEtag(
