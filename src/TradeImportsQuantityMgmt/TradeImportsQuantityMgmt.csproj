@@ -17,6 +17,7 @@
     <PackageReference Include="Defra.TradeImports.Tracing" Version="0.2.0" />
     <PackageReference Include="Defra.TradeImports.EmfExporter" Version="0.2.0" />
     <PackageReference Include="Defra.Trade.Gateway.Api.Client" Version="0.4.0" />
+    <PackageReference Include="Defra.TradeImportsDataApi.Api.Client" Version="0.49.0-pr-618.2732" />
     <PackageReference Include="Elastic.CommonSchema.Serilog" Version="9.0.0" />
     <PackageReference Include="Elastic.Serilog.Enrichers.Web" Version="9.0.0" />
     <PackageReference Include="Microsoft.AspNetCore.HeaderPropagation" Version="10.0.11" />

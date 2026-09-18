@@ -1,4 +1,6 @@
-﻿using TradeImportsQuantityMgmt.Contract;
+using Defra.TradeImportsDataApi.Domain.Ipaffs;
+using Defra.TradeImportsDataApi.Domain.Traces;
+using TradeImportsQuantityMgmt.Contract;
 
 namespace TradeImportsQuantityMgmt.Mappings;
 

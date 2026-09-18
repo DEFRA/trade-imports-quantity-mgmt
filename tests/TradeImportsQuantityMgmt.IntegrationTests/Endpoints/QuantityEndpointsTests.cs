@@ -73,6 +73,15 @@ public class QuantityEndpointsTests(TradeGatewayWebApplicationFactory factory, I
             cancellationToken: TestContext.Current.CancellationToken
         );
 
+        // Stub the Data API reservation upsert that the endpoint performs after a successful gateway reservation.
+        await WireMockStubber.StubDataApiChedReservationPutAsync(
+            factory.WireMockBaseUrl,
+            Ched,
+            Mrn,
+            HttpStatusCode.OK,
+            TestContext.Current.CancellationToken
+        );
+
         var response = await factory
             .CreateQuantityManagementClient()
             .PutChedReservation(Ched, Mrn, ValidRequest(), TestContext.Current.CancellationToken);
@@ -82,6 +91,70 @@ public class QuantityEndpointsTests(TradeGatewayWebApplicationFactory factory, I
             .ContentHeaders?.ContentType?.MediaType.Should()
             .Be(MediaTypeAttribute.For<ChedDeclarationReservation>());
         await Verify(response.Content);
+    }
+
+    [Fact]
+    public async Task Put_SendsIfMatchHeader_WhenAnExistingReservationRecordExists()
+    {
+        var gatewayResponse = new GatewayChedDeclarationReservation
+        {
+            Reserved =
+            [
+                new Trade.Gateway.Api.Contract.Customs.AllocatedCommodityQuantity
+                {
+                    GoodsItemNumber = 1,
+                    CertificateLineNumber = 1,
+                    UnitOfMeasure = "ASVX",
+                    Quantity = 300m,
+                },
+            ],
+            Consumed = [],
+        };
+
+        await WireMockStubber.StubChedPutReservationAsync(
+            factory.WireMockBaseUrl,
+            Mrn,
+            Ched,
+            HttpStatusCode.OK,
+            jsonBody: gatewayResponse,
+            cancellationToken: TestContext.Current.CancellationToken
+        );
+
+        // A reservation record already exists for this declaration, with this ETag.
+        const string etag = "\"existing-etag-value\"";
+        await WireMockStubber.StubDataApiChedReservationGetAsync(
+            factory.WireMockBaseUrl,
+            Ched,
+            Mrn,
+            etag,
+            TestContext.Current.CancellationToken
+        );
+
+        await WireMockStubber.StubDataApiChedReservationPutAsync(
+            factory.WireMockBaseUrl,
+            Ched,
+            Mrn,
+            HttpStatusCode.OK,
+            TestContext.Current.CancellationToken
+        );
+
+        var response = await factory
+            .CreateQuantityManagementClient()
+            .PutChedReservation(Ched, Mrn, ValidRequest(), TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        // The write to the Data API must be conditioned on the ETag it read back moments earlier,
+        // so it fails as a conflict rather than silently overwriting a concurrent update.
+        var ifMatch = await WireMockStubber.GetRequestHeader(
+            factory.WireMockBaseUrl,
+            "PUT",
+            $"/traces-cheds/{Ched}/reservation/{Mrn}",
+            "If-Match",
+            TestContext.Current.CancellationToken
+        );
+
+        ifMatch.Should().Be(etag);
     }
 
     [Fact]

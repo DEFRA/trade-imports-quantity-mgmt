@@ -49,6 +49,10 @@ public class TradeGatewayWebApplicationFactory : WebApplicationFactory<Program>
                         // The tests run against a local WireMock container emulating the Traces Gateway
                         ["TracesGateway:BaseUrl"] = WireMockBaseUrl,
 
+                        ["DataApi:BaseAddress"] = WireMockBaseUrl,
+                        ["DataApi:Username"] = "test",
+                        ["DataApi:Password"] = "test",
+
                         ["ResourceEventsConsumer:ResourceEventsQueueUrl"] =
                             "http://floci:4566/000000000000/trade_imports_data_upserted_quantity_mgmt",
                     }

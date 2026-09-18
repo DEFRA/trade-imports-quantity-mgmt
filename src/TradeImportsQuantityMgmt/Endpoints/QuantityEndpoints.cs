@@ -1,7 +1,9 @@
+using Defra.TradeImportsDataApi.Api.Client;
 using Trade.Gateway.Api.Client.Clients;
 using TradeImportsQuantityMgmt.Contract;
 using TradeImportsQuantityMgmt.Filters;
 using TradeImportsQuantityMgmt.Mappings;
+using TradeImportsQuantityMgmt.Utils;
 
 namespace TradeImportsQuantityMgmt.Endpoints;
 
@@ -36,6 +38,7 @@ public static class QuantityEndpoints
         string mrn,
         ChedReservationRequest request,
         ITracesGatewayChedClient tracesGatewayChedClient,
+        ITradeImportsDataApiClient tradeImportsDataApiClient,
         CancellationToken cancellationToken
     )
     {
@@ -44,6 +47,14 @@ public static class QuantityEndpoints
 
         if (response.IsSuccessful)
         {
+            // Send the reservation record to the data-api, threading through the ETag of any
+            // existing record so the write is an optimistic-concurrency update rather than a
+            // blind overwrite.
+            var etag = await tradeImportsDataApiClient.GetChedReservationETag(chedId, mrn, cancellationToken);
+
+            var reservation = response.Content.ToReservationForDataApi(chedId, mrn);
+            await tradeImportsDataApiClient.PutChedReservation(chedId, mrn, reservation, etag, cancellationToken);
+
             return Results.Json(
                 response.Content?.ToApiContract(),
                 contentType: MediaTypeAttribute.For<ChedDeclarationReservation>()
