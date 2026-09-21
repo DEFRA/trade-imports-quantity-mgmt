@@ -29,6 +29,76 @@ public class ChedDeclarationReservationMapperTests
             DeclarationReference = new DeclarationReference { Type = DeclarationReferenceType.Mrn, Value = mrn },
         };
 
+    private static Trade.Gateway.Api.Contract.Customs.ChedDeclarationReservation ReservedWithCommodityCode(
+        Trade.Gateway.Api.Contract.Customs.CommodityCode? commodityCode
+    ) =>
+        new()
+        {
+            Reserved =
+            [
+                new AllocatedCommodityQuantity
+                {
+                    GoodsItemNumber = 1,
+                    UnitOfMeasure = "ASVX",
+                    Quantity = 10m,
+                    CommodityCode = commodityCode,
+                },
+            ],
+            Consumed = [],
+        };
+
+    [Fact]
+    public void ToReservationForDataApi_ChedDeclarationReservation_CommodityCodeUsesTaricCodeWhenPresent()
+    {
+        var source = ReservedWithCommodityCode(
+            new Trade.Gateway.Api.Contract.Customs.CommodityCode
+            {
+                TaricCode = "0123456789",
+                HarmonizedSystemSubheadingCode = "012345",
+            }
+        );
+
+        var result = source.ToReservationForDataApi(ChedId, ThisMrn);
+
+        result.Commodities.Should().ContainSingle().Which.CommodityCode.Should().Be("0123456789");
+    }
+
+    [Fact]
+    public void ToReservationForDataApi_ChedDeclarationReservation_CommodityCodeFallsBackToHarmonizedSystemSubheadingCode()
+    {
+        var source = ReservedWithCommodityCode(
+            new Trade.Gateway.Api.Contract.Customs.CommodityCode
+            {
+                TaricCode = null,
+                HarmonizedSystemSubheadingCode = "012345",
+            }
+        );
+
+        var result = source.ToReservationForDataApi(ChedId, ThisMrn);
+
+        result.Commodities.Should().ContainSingle().Which.CommodityCode.Should().Be("012345");
+    }
+
+    [Fact]
+    public void ToReservationForDataApi_ChedDeclarationReservation_CommodityCodeIsUnknownWhenNoCodesPresent()
+    {
+        var source = ReservedWithCommodityCode(new Trade.Gateway.Api.Contract.Customs.CommodityCode());
+
+        var result = source.ToReservationForDataApi(ChedId, ThisMrn);
+
+        result.Commodities.Should().ContainSingle().Which.CommodityCode.Should().Be("Unknown");
+    }
+
+    [Fact]
+    public void ToReservationForDataApi_ChedDeclarationReservation_CommodityCodeIsUnknownWhenCommodityCodeIsNull()
+    {
+        var source = ReservedWithCommodityCode(null);
+
+        var result = source.ToReservationForDataApi(ChedId, ThisMrn);
+
+        result.Commodities.Should().ContainSingle().Which.CommodityCode.Should().Be("Unknown");
+    }
+
     [Fact]
     public void ToReservationForDataApi_QuantityAllocations_IgnoresOtherDeclarationsOnTheSameChed()
     {

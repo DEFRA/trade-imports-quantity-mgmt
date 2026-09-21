@@ -108,7 +108,7 @@ public static class ChedDeclarationReservationMapper
         new()
         {
             CertificateLineNumber = x.CertificateLineNumber.GetValueOrDefault(),
-            CommodityCode = x.CommodityCode?.TaricCode!,
+            CommodityCode = x.CommodityCode?.TaricCode ?? x.CommodityCode?.HarmonizedSystemSubheadingCode ?? "Unknown",
             GoodsItemNumber = x.GoodsItemNumber.GetValueOrDefault(),
             Quantity = x.Quantity,
             UnitOfMeasure = x.UnitOfMeasure!,
