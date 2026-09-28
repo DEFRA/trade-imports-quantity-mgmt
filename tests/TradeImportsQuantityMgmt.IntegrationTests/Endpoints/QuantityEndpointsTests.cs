@@ -271,7 +271,6 @@ public class QuantityEndpointsTests(TradeGatewayWebApplicationFactory factory, I
                 Status = (int)HttpStatusCode.Conflict,
                 Detail = "A reservation already exists for this declaration.",
                 Reason = "QuantitiesInsufficient",
-                traceId = "abc-123",
             },
             cancellationToken: TestContext.Current.CancellationToken
         );
@@ -292,8 +291,8 @@ public class QuantityEndpointsTests(TradeGatewayWebApplicationFactory factory, I
 
         var problem = await ((ApiException)response.Error!).GetContentAsAsync<ProblemDetails>();
         problem.Should().NotBeNull();
-        problem!.Extensions.Should().ContainKey("traceId");
-        problem.Extensions["traceId"]!.ToString().Should().Be("abc-123");
+        problem!.Extensions.Should().ContainKey("Reason");
+        problem.Extensions["Reason"]!.ToString().Should().Be("QuantitiesInsufficient");
     }
 
     [Fact]
