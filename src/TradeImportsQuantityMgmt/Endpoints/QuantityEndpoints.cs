@@ -85,7 +85,7 @@ public static class QuantityEndpoints
         return Results.Problem(
             statusCode: response.StatusCode != null ? (int)response.StatusCode : 500,
             detail: response.Error.Message,
-            extensions: (IEnumerable<KeyValuePair<string, object?>>?)problem?.Extensions
+            extensions: problem?.Extensions?.ToDictionary(x => x.Key, object? (x) => x.Value)
         );
     }
 }
