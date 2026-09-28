@@ -1,4 +1,5 @@
 using System.Net.NetworkInformation;
+using System.Text.Json;
 using Defra.TradeImportsDataApi.Api.Client;
 using Defra.TradeImportsDataApi.Domain.Traces;
 using Refit;
@@ -57,6 +58,7 @@ public static class QuantityEndpoints
         var etag = await tradeImportsDataApiClient.GetChedReservationETag(chedId, mrn, cancellationToken);
         Reservation reservation;
         ChedReservationProblemDetails? problem = null;
+        string? problemContent = null;
         if (response.IsSuccessful)
         {
             reservation = response.Content.ToReservationForDataApi(chedId, mrn);
@@ -70,6 +72,7 @@ public static class QuantityEndpoints
         else if (response.Error is ApiException apiException)
         {
             problem = await apiException.GetContentAsAsync<ChedReservationProblemDetails>();
+            problemContent = apiException.Content;
 
             reservation = new Reservation()
             {
@@ -82,10 +85,51 @@ public static class QuantityEndpoints
             await tradeImportsDataApiClient.PutChedReservation(chedId, mrn, reservation, etag, cancellationToken);
         }
 
+        // ChedReservationProblemDetails.Reason is a get-only property computed from Extensions["reason"],
+        // but that means System.Text.Json already claims the "reason" key for the (unwritable) Reason
+        // property during deserialisation, so it never actually reaches Extensions and Reason is always
+        // null. Read "reason" back out of the raw body ourselves so it isn't silently lost.
+        Dictionary<string, object?>? extensions = null;
+        if (problem is not null)
+        {
+            extensions = problem.Extensions?.ToDictionary(x => x.Key, object? (x) => x.Value) ?? [];
+            if (TryGetReason(problemContent, out var reason))
+                extensions["reason"] = reason;
+        }
+
         return Results.Problem(
             statusCode: response.StatusCode != null ? (int)response.StatusCode : 500,
             detail: response.Error.Message,
-            extensions: problem?.Extensions?.ToDictionary(x => x.Key, object? (x) => x.Value)
+            extensions: extensions
         );
+    }
+
+    private static bool TryGetReason(string? content, out string? reason)
+    {
+        reason = null;
+        if (string.IsNullOrEmpty(content))
+            return false;
+
+        try
+        {
+            using var document = JsonDocument.Parse(content);
+            foreach (var property in document.RootElement.EnumerateObject())
+            {
+                if (
+                    string.Equals(property.Name, "reason", StringComparison.OrdinalIgnoreCase)
+                    && property.Value.ValueKind == JsonValueKind.String
+                )
+                {
+                    reason = property.Value.GetString();
+                    return reason is not null;
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            // Not JSON, or not an object - nothing to extract.
+        }
+
+        return false;
     }
 }

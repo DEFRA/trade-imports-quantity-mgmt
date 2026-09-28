@@ -256,10 +256,12 @@ public class QuantityEndpointsTests(TradeGatewayWebApplicationFactory factory, I
     }
 
     [Fact]
-    public async Task Put_ReturnsGatewayProblemExtensions_WhenTradeGatewayReturnsAProblem()
+    public async Task Put_ReturnsGatewayProblemReason_WhenTradeGatewayReturnsAProblem()
     {
-        // Any fields on the gateway's problem body beyond its known ones (title/status/detail/reason)
-        // are captured as extension data and should be surfaced on the response we return.
+        // ChedReservationProblemDetails.Reason is a get-only property computed from
+        // Extensions["reason"], but System.Text.Json still claims that key for the (unwritable)
+        // Reason property during deserialisation, so it never reaches Extensions and Reason is
+        // always null - the endpoint reads "reason" back out of the raw body itself instead.
         await WireMockStubber.StubChedPutReservationAsync(
             factory.WireMockBaseUrl,
             Mrn,
@@ -291,8 +293,8 @@ public class QuantityEndpointsTests(TradeGatewayWebApplicationFactory factory, I
 
         var problem = await ((ApiException)response.Error!).GetContentAsAsync<ProblemDetails>();
         problem.Should().NotBeNull();
-        problem!.Extensions.Should().ContainKey("Reason");
-        problem.Extensions["Reason"]!.ToString().Should().Be("QuantitiesInsufficient");
+        problem!.Extensions.Should().ContainKey("reason");
+        problem.Extensions["reason"]!.ToString().Should().Be("QuantitiesInsufficient");
     }
 
     [Fact]
