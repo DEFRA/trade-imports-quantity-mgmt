@@ -1,9 +1,15 @@
+using System.Net.NetworkInformation;
 using Defra.TradeImportsDataApi.Api.Client;
+using Defra.TradeImportsDataApi.Domain.Traces;
+using Refit;
 using Trade.Gateway.Api.Client.Clients;
+using Trade.Gateway.Api.Contract.Customs;
 using TradeImportsQuantityMgmt.Contract;
 using TradeImportsQuantityMgmt.Filters;
 using TradeImportsQuantityMgmt.Mappings;
 using TradeImportsQuantityMgmt.Utils;
+using ChedDeclarationReservation = TradeImportsQuantityMgmt.Contract.ChedDeclarationReservation;
+using ChedReservationRequest = TradeImportsQuantityMgmt.Contract.ChedReservationRequest;
 
 namespace TradeImportsQuantityMgmt.Endpoints;
 
@@ -45,14 +51,15 @@ public static class QuantityEndpoints
         var gatewayRequest = request.ToTradeGatewayDto();
         var response = await tracesGatewayChedClient.PutChedReservation(chedId, mrn, gatewayRequest, cancellationToken);
 
+        // Send the reservation record to the data-api, threading through the ETag of any
+        // existing record so the write is an optimistic-concurrency update rather than a
+        // blind overwrite.
+        var etag = await tradeImportsDataApiClient.GetChedReservationETag(chedId, mrn, cancellationToken);
+        Reservation reservation;
+        ChedReservationProblemDetails? problem = null;
         if (response.IsSuccessful)
         {
-            // Send the reservation record to the data-api, threading through the ETag of any
-            // existing record so the write is an optimistic-concurrency update rather than a
-            // blind overwrite.
-            var etag = await tradeImportsDataApiClient.GetChedReservationETag(chedId, mrn, cancellationToken);
-
-            var reservation = response.Content.ToReservationForDataApi(chedId, mrn);
+            reservation = response.Content.ToReservationForDataApi(chedId, mrn);
             await tradeImportsDataApiClient.PutChedReservation(chedId, mrn, reservation, etag, cancellationToken);
 
             return Results.Json(
@@ -60,10 +67,25 @@ public static class QuantityEndpoints
                 contentType: MediaTypeAttribute.For<ChedDeclarationReservation>()
             );
         }
+        else if (response.Error is ApiException apiException)
+        {
+            problem = await apiException.GetContentAsAsync<ChedReservationProblemDetails>();
+
+            reservation = new Reservation()
+            {
+                ChedId = chedId,
+                Mrn = mrn,
+                Status = ReservationStatus.Unsuccessful,
+                Timestamp = DateTime.UtcNow,
+                UnsuccessfulReason = problem?.Status?.ToString(),
+            };
+            await tradeImportsDataApiClient.PutChedReservation(chedId, mrn, reservation, etag, cancellationToken);
+        }
 
         return Results.Problem(
             statusCode: response.StatusCode != null ? (int)response.StatusCode : 500,
-            detail: response.Error.Message
+            detail: response.Error.Message,
+            extensions: (IEnumerable<KeyValuePair<string, object?>>?)problem?.Extensions
         );
     }
 }

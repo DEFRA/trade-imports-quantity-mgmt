@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.AspNetCore.Http;
 using NSubstitute;
@@ -181,6 +182,15 @@ public class QuantityEndpointsTests(TradeGatewayWebApplicationFactory factory, I
             cancellationToken: TestContext.Current.CancellationToken
         );
 
+        // A gateway failure now also persists an "Unsuccessful" reservation record to the Data API.
+        await WireMockStubber.StubDataApiChedReservationPutAsync(
+            factory.WireMockBaseUrl,
+            Ched,
+            Mrn,
+            HttpStatusCode.OK,
+            TestContext.Current.CancellationToken
+        );
+
         var response = await factory
             .CreateQuantityManagementClient()
             .PutChedReservation(Ched, Mrn, ValidRequest(), TestContext.Current.CancellationToken);
@@ -192,6 +202,98 @@ public class QuantityEndpointsTests(TradeGatewayWebApplicationFactory factory, I
         problem.Should().NotBeNull();
         problem!.Status.Should().Be((int)HttpStatusCode.NotFound);
         problem.Detail.Should().Be(gatewayError.Message);
+    }
+
+    [Fact]
+    public async Task Put_PersistsUnsuccessfulReservation_WhenTradeGatewayReturnsAProblem()
+    {
+        // The gateway rejects the reservation with a structured problem body, including its own
+        // failure "status" that the endpoint should thread through as the persisted reason.
+        await WireMockStubber.StubChedPutReservationAsync(
+            factory.WireMockBaseUrl,
+            Mrn,
+            Ched,
+            HttpStatusCode.Conflict,
+            jsonBody: new
+            {
+                Title = "Reservation conflict",
+                Status = (int)HttpStatusCode.Conflict,
+                Detail = "A reservation already exists for this declaration.",
+                Reason = "QuantitiesInsufficient",
+            },
+            cancellationToken: TestContext.Current.CancellationToken
+        );
+
+        await WireMockStubber.StubDataApiChedReservationPutAsync(
+            factory.WireMockBaseUrl,
+            Ched,
+            Mrn,
+            HttpStatusCode.OK,
+            TestContext.Current.CancellationToken
+        );
+
+        var response = await factory
+            .CreateQuantityManagementClient()
+            .PutChedReservation(Ched, Mrn, ValidRequest(), TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+
+        var body = await WireMockStubber.GetRequestBody(
+            factory.WireMockBaseUrl,
+            "PUT",
+            $"/traces-cheds/{Ched}/reservation/{Mrn}",
+            TestContext.Current.CancellationToken
+        );
+
+        body.Should().NotBeNull();
+        using var persisted = JsonDocument.Parse(body!);
+        persisted.RootElement.GetProperty("status").GetString().Should().Be("Unsuccessful");
+        persisted
+            .RootElement.GetProperty("unsuccessfulReason")
+            .GetString()
+            .Should()
+            .Be(((int)HttpStatusCode.Conflict).ToString());
+    }
+
+    [Fact]
+    public async Task Put_ReturnsGatewayProblemExtensions_WhenTradeGatewayReturnsAProblem()
+    {
+        // Any fields on the gateway's problem body beyond its known ones (title/status/detail/reason)
+        // are captured as extension data and should be surfaced on the response we return.
+        await WireMockStubber.StubChedPutReservationAsync(
+            factory.WireMockBaseUrl,
+            Mrn,
+            Ched,
+            HttpStatusCode.Conflict,
+            jsonBody: new
+            {
+                Title = "Reservation conflict",
+                Status = (int)HttpStatusCode.Conflict,
+                Detail = "A reservation already exists for this declaration.",
+                Reason = "QuantitiesInsufficient",
+                traceId = "abc-123",
+            },
+            cancellationToken: TestContext.Current.CancellationToken
+        );
+
+        await WireMockStubber.StubDataApiChedReservationPutAsync(
+            factory.WireMockBaseUrl,
+            Ched,
+            Mrn,
+            HttpStatusCode.OK,
+            TestContext.Current.CancellationToken
+        );
+
+        var response = await factory
+            .CreateQuantityManagementClient()
+            .PutChedReservation(Ched, Mrn, ValidRequest(), TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+
+        var problem = await ((ApiException)response.Error!).GetContentAsAsync<ProblemDetails>();
+        problem.Should().NotBeNull();
+        problem!.Extensions.Should().ContainKey("traceId");
+        problem.Extensions["traceId"]!.ToString().Should().Be("abc-123");
     }
 
     [Fact]
