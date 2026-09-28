@@ -1,4 +1,3 @@
-using System.Net.NetworkInformation;
 using System.Text.Json;
 using Defra.TradeImportsDataApi.Api.Client;
 using Defra.TradeImportsDataApi.Domain.Traces;

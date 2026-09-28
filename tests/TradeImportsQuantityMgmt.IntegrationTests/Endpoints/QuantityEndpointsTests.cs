@@ -290,11 +290,9 @@ public class QuantityEndpointsTests(TradeGatewayWebApplicationFactory factory, I
             .PutChedReservation(Ched, Mrn, ValidRequest(), TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Conflict);
-
-        var problem = await ((ApiException)response.Error!).GetContentAsAsync<ProblemDetails>();
-        problem.Should().NotBeNull();
-        problem!.Extensions.Should().ContainKey("reason");
-        problem.Extensions["reason"]!.ToString().Should().Be("QuantitiesInsufficient");
+        var settings = new VerifySettings();
+        settings.ScrubMember("traceId");
+        await VerifyJson(((ApiException)response.Error!).Content, settings);
     }
 
     [Fact]
