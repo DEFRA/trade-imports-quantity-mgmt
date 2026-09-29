@@ -79,7 +79,7 @@ public static class QuantityEndpoints
                 Mrn = mrn,
                 Status = ReservationStatus.Unsuccessful,
                 Timestamp = DateTime.UtcNow,
-                UnsuccessfulReason = problem?.Status?.ToString(),
+                UnsuccessfulReason = problem?.Reason?.ToString(),
             };
             await tradeImportsDataApiClient.PutChedReservation(chedId, mrn, reservation, etag, cancellationToken);
         }
