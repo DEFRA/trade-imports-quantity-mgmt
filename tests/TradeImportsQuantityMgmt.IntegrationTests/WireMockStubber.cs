@@ -256,6 +256,39 @@ internal static class WireMockStubber
     }
 
     /// <summary>
+    /// Returns the raw body of the recorded <paramref name="method"/> request whose URL contains
+    /// <paramref name="pathFragment"/>, or <c>null</c> if no such request exists.
+    /// </summary>
+    public static async Task<string?> GetRequestBody(
+        string wireMockBaseUrl,
+        string method,
+        string pathFragment,
+        CancellationToken cancellationToken = default
+    )
+    {
+        using var http = new HttpClient { BaseAddress = new Uri(wireMockBaseUrl) };
+
+        var resp = await http.GetAsync("/__admin/requests", cancellationToken);
+        resp.EnsureSuccessStatusCode();
+
+        using var document = await JsonDocument.ParseAsync(
+            await resp.Content.ReadAsStreamAsync(cancellationToken),
+            cancellationToken: cancellationToken
+        );
+
+        return document
+            .RootElement.GetProperty("requests")
+            .EnumerateArray()
+            .Select(x => x.GetProperty("request"))
+            .Where(x =>
+                string.Equals(x.GetProperty("method").GetString(), method, StringComparison.OrdinalIgnoreCase)
+                && x.GetProperty("url").GetString()?.Contains(pathFragment, StringComparison.OrdinalIgnoreCase) is true
+            )
+            .Select(x => x.TryGetProperty("body", out var body) ? body.GetString() : null)
+            .FirstOrDefault();
+    }
+
+    /// <summary>
     /// Returns the value of <paramref name="headerName"/> on the recorded <paramref name="method"/>
     /// request whose URL contains <paramref name="pathFragment"/>, or <c>null</c> if no such
     /// request/header exists.
