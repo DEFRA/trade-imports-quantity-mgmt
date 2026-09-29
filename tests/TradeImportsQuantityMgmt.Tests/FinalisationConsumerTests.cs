@@ -14,7 +14,6 @@ using Trade.Gateway.Api.Client.Clients;
 using Trade.Gateway.Api.Contract.Certificate;
 using Trade.Gateway.Api.Contract.Customs;
 using TradeImportsQuantityMgmt.Features.ResourceEvents;
-using TradeImportsQuantityMgmt.Mappings;
 
 namespace TradeImportsQuantityMgmt.Tests;
 
@@ -116,15 +115,7 @@ public class FinalisationConsumerTests
         var expectedMessage =
             $"Releasing goods for MRN {mrn} - CHED {ched} returned response code {HttpStatusCode.InternalServerError}";
 
-        logger
-            .Received(1)
-            .Log(
-                Microsoft.Extensions.Logging.LogLevel.Warning,
-                Arg.Any<Microsoft.Extensions.Logging.EventId>(),
-                Arg.Is<object>(o => (o != null ? o.ToString() : string.Empty) == expectedMessage),
-                Arg.Any<Exception>(),
-                Arg.Any<Func<object, Exception?, string>>()
-            );
+        WarningMessages(logger).Should().ContainSingle().Which.Should().Be(expectedMessage);
     }
 
     [Fact]
@@ -211,15 +202,7 @@ public class FinalisationConsumerTests
         var expectedMessage =
             $"Deleting reservation for MRN {mrn} - CHED {ched} returned response code {HttpStatusCode.InternalServerError}";
 
-        logger
-            .Received(1)
-            .Log(
-                Microsoft.Extensions.Logging.LogLevel.Warning,
-                Arg.Any<Microsoft.Extensions.Logging.EventId>(),
-                Arg.Is<object>(o => (o != null ? o.ToString() : string.Empty) == expectedMessage),
-                Arg.Any<Exception>(),
-                Arg.Any<Func<object, Exception?, string>>()
-            );
+        WarningMessages(logger).Should().ContainSingle().Which.Should().Be(expectedMessage);
     }
 
     [Fact]
@@ -440,10 +423,13 @@ public class FinalisationConsumerTests
         await consumer.ConsumeAsync(context, TestContext.Current.CancellationToken);
 
         // Assert
-        await tracesClient.Received(1).ReleaseChedReservation(ched, mrn, TestContext.Current.CancellationToken);
-        await tracesClient
-            .DidNotReceive()
-            .DeleteChedReservation(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        CallsTo(tracesClient, nameof(ITracesGatewayChedClient.ReleaseChedReservation))
+            .Should()
+            .ContainSingle()
+            .Which.Take(2)
+            .Should()
+            .Equal(ched, mrn);
+        CallsTo(tracesClient, nameof(ITracesGatewayChedClient.DeleteChedReservation)).Should().BeEmpty();
     }
 
     [Theory]
@@ -471,12 +457,8 @@ public class FinalisationConsumerTests
         await consumer.ConsumeAsync(context, TestContext.Current.CancellationToken);
 
         // Assert
-        await tracesClient
-            .DidNotReceive()
-            .ReleaseChedReservation(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
-        await tracesClient
-            .DidNotReceive()
-            .DeleteChedReservation(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        CallsTo(tracesClient, nameof(ITracesGatewayChedClient.ReleaseChedReservation)).Should().BeEmpty();
+        CallsTo(tracesClient, nameof(ITracesGatewayChedClient.DeleteChedReservation)).Should().BeEmpty();
     }
 
     [Theory]
@@ -506,12 +488,35 @@ public class FinalisationConsumerTests
         await consumer.ConsumeAsync(context, TestContext.Current.CancellationToken);
 
         // Assert
-        await tracesClient.Received(1).DeleteChedReservation(ched, mrn, TestContext.Current.CancellationToken);
-        await dataApiClient.Received(1).DeleteChedReservation(ched, mrn, TestContext.Current.CancellationToken);
-        await tracesClient
-            .DidNotReceive()
-            .ReleaseChedReservation(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        CallsTo(tracesClient, nameof(ITracesGatewayChedClient.DeleteChedReservation))
+            .Should()
+            .ContainSingle()
+            .Which.Take(2)
+            .Should()
+            .Equal(ched, mrn);
+        CallsTo(dataApiClient, nameof(ITradeImportsDataApiClient.DeleteChedReservation))
+            .Should()
+            .ContainSingle()
+            .Which.Take(2)
+            .Should()
+            .Equal(ched, mrn);
+        CallsTo(tracesClient, nameof(ITracesGatewayChedClient.ReleaseChedReservation)).Should().BeEmpty();
     }
+
+    private static IEnumerable<object?[]> CallsTo(object substitute, string methodName) =>
+        substitute
+            .ReceivedCalls()
+            .Where(call => call.GetMethodInfo().Name == methodName)
+            .Select(call => call.GetArguments());
+
+    private static IEnumerable<string> WarningMessages(ILogger logger) =>
+        logger
+            .ReceivedCalls()
+            .Where(call =>
+                call.GetMethodInfo().Name == nameof(ILogger.Log)
+                && call.GetArguments()[0] is Microsoft.Extensions.Logging.LogLevel.Warning
+            )
+            .Select(call => call.GetArguments()[2]?.ToString() ?? string.Empty);
 
     private static void StubTracesChedsByMrn(
         ITradeImportsDataApiClient dataApiClient,
@@ -649,14 +654,6 @@ public class FinalisationConsumerTests
         // Assert: a warning should be logged indicating deserialisation
         var expectedMessage = $"Message for MRN {mrn} could not be deserialised";
 
-        logger
-            .Received(1)
-            .Log(
-                Microsoft.Extensions.Logging.LogLevel.Warning,
-                Arg.Any<Microsoft.Extensions.Logging.EventId>(),
-                Arg.Is<object>(o => (o != null ? o.ToString() : string.Empty) == expectedMessage),
-                Arg.Any<Exception>(),
-                Arg.Any<Func<object, Exception?, string>>()
-            );
+        WarningMessages(logger).Should().ContainSingle().Which.Should().Be(expectedMessage);
     }
 }
