@@ -72,6 +72,7 @@ public static class QuantityEndpoints
         {
             problem = await apiException.GetContentAsAsync<ChedReservationProblemDetails>();
             problemContent = apiException.Content;
+            TryGetReason(problemContent, out var unsuccessfulReason);
 
             reservation = new Reservation()
             {
@@ -79,7 +80,7 @@ public static class QuantityEndpoints
                 Mrn = mrn,
                 Status = ReservationStatus.Unsuccessful,
                 Timestamp = DateTime.UtcNow,
-                UnsuccessfulReason = problem?.Reason?.ToString(),
+                UnsuccessfulReason = unsuccessfulReason,
             };
             await tradeImportsDataApiClient.PutChedReservation(chedId, mrn, reservation, etag, cancellationToken);
         }

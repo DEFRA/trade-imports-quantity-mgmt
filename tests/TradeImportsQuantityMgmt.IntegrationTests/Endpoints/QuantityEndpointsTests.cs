@@ -208,7 +208,7 @@ public class QuantityEndpointsTests(TradeGatewayWebApplicationFactory factory, I
     public async Task Put_PersistsUnsuccessfulReservation_WhenTradeGatewayReturnsAProblem()
     {
         // The gateway rejects the reservation with a structured problem body, including its own
-        // failure "status" that the endpoint should thread through as the persisted reason.
+        // failure "reason" that the endpoint should thread through as the persisted reason.
         await WireMockStubber.StubChedPutReservationAsync(
             factory.WireMockBaseUrl,
             Mrn,
@@ -248,11 +248,7 @@ public class QuantityEndpointsTests(TradeGatewayWebApplicationFactory factory, I
         body.Should().NotBeNull();
         using var persisted = JsonDocument.Parse(body!);
         persisted.RootElement.GetProperty("status").GetString().Should().Be("Unsuccessful");
-        persisted
-            .RootElement.GetProperty("unsuccessfulReason")
-            .GetString()
-            .Should()
-            .Be(((int)HttpStatusCode.Conflict).ToString());
+        persisted.RootElement.GetProperty("unsuccessfulReason").GetString().Should().Be("QuantitiesInsufficient");
     }
 
     [Fact]
