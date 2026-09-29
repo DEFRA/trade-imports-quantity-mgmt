@@ -14,7 +14,6 @@ using Trade.Gateway.Api.Client.Clients;
 using Trade.Gateway.Api.Contract.Certificate;
 using Trade.Gateway.Api.Contract.Customs;
 using TradeImportsQuantityMgmt.Features.ResourceEvents;
-using TradeImportsQuantityMgmt.Mappings;
 
 namespace TradeImportsQuantityMgmt.Tests;
 
@@ -116,15 +115,7 @@ public class FinalisationConsumerTests
         var expectedMessage =
             $"Releasing goods for MRN {mrn} - CHED {ched} returned response code {HttpStatusCode.InternalServerError}";
 
-        logger
-            .Received(1)
-            .Log(
-                Microsoft.Extensions.Logging.LogLevel.Warning,
-                Arg.Any<Microsoft.Extensions.Logging.EventId>(),
-                Arg.Is<object>(o => (o != null ? o.ToString() : string.Empty) == expectedMessage),
-                Arg.Any<Exception>(),
-                Arg.Any<Func<object, Exception?, string>>()
-            );
+        WarningMessages(logger).Should().ContainSingle().Which.Should().Be(expectedMessage);
     }
 
     [Fact]
@@ -211,15 +202,7 @@ public class FinalisationConsumerTests
         var expectedMessage =
             $"Deleting reservation for MRN {mrn} - CHED {ched} returned response code {HttpStatusCode.InternalServerError}";
 
-        logger
-            .Received(1)
-            .Log(
-                Microsoft.Extensions.Logging.LogLevel.Warning,
-                Arg.Any<Microsoft.Extensions.Logging.EventId>(),
-                Arg.Is<object>(o => (o != null ? o.ToString() : string.Empty) == expectedMessage),
-                Arg.Any<Exception>(),
-                Arg.Any<Func<object, Exception?, string>>()
-            );
+        WarningMessages(logger).Should().ContainSingle().Which.Should().Be(expectedMessage);
     }
 
     [Fact]
@@ -304,7 +287,7 @@ public class FinalisationConsumerTests
         var logger = Substitute.For<ILogger<FinalisationConsumer>>();
         var consumer = new FinalisationConsumer(logger, tracesClient, dataApiClient);
 
-        var context = BuildClearedMessageContext(mrn, ched);
+        var context = BuildMessageContext(mrn, ched);
 
         // Act
         await consumer.ConsumeAsync(context, TestContext.Current.CancellationToken);
@@ -389,7 +372,7 @@ public class FinalisationConsumerTests
         var logger = Substitute.For<ILogger<FinalisationConsumer>>();
         var consumer = new FinalisationConsumer(logger, tracesClient, dataApiClient);
 
-        var context = BuildClearedMessageContext(mrn, ched);
+        var context = BuildMessageContext(mrn, ched);
 
         // Act
         await consumer.ConsumeAsync(context, TestContext.Current.CancellationToken);
@@ -410,6 +393,130 @@ public class FinalisationConsumerTests
         deletedChed.Should().Be(ched);
         deletedMrn.Should().Be(mrn);
     }
+
+    [Theory]
+    [InlineData(FinalState.Cleared)]
+    [InlineData(FinalState.Destroyed)]
+    [InlineData(FinalState.Seized)]
+    [InlineData(FinalState.ReleasedToKingsWarehouse)]
+    public async Task ConsumeAsync_ReleasesReservation_WhenFinalStateIsReleasableAndNotManualRelease(string finalState)
+    {
+        // Arrange
+        var mrn = "25GBVLKTCO0HN7MUA4";
+        var ched = "CHEDA.GB.2026.1234567";
+
+        var dataApiClient = Substitute.For<ITradeImportsDataApiClient>();
+        var tracesClient = Substitute.For<ITracesGatewayChedClient>();
+
+        tracesClient
+            .ReleaseChedReservation(ched, mrn, TestContext.Current.CancellationToken)
+            .Returns(Task.FromResult(new HttpResponseMessage(HttpStatusCode.InternalServerError)));
+
+        StubTracesChedsByMrn(dataApiClient, mrn, ched);
+
+        var logger = Substitute.For<ILogger<FinalisationConsumer>>();
+        var consumer = new FinalisationConsumer(logger, tracesClient, dataApiClient);
+
+        var context = BuildMessageContext(mrn, ched, finalState);
+
+        // Act
+        await consumer.ConsumeAsync(context, TestContext.Current.CancellationToken);
+
+        // Assert
+        CallsTo(tracesClient, nameof(ITracesGatewayChedClient.ReleaseChedReservation))
+            .Should()
+            .ContainSingle()
+            .Which.Take(2)
+            .Should()
+            .Equal(ched, mrn);
+        CallsTo(tracesClient, nameof(ITracesGatewayChedClient.DeleteChedReservation)).Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(FinalState.Cleared)]
+    [InlineData(FinalState.Destroyed)]
+    [InlineData(FinalState.Seized)]
+    [InlineData(FinalState.ReleasedToKingsWarehouse)]
+    public async Task ConsumeAsync_DoesNotReleaseReservation_WhenManualRelease(string finalState)
+    {
+        // Arrange
+        var mrn = "25GBVLKTCO0HN7MUA4";
+        var ched = "CHEDA.GB.2026.1234567";
+
+        var dataApiClient = Substitute.For<ITradeImportsDataApiClient>();
+        var tracesClient = Substitute.For<ITracesGatewayChedClient>();
+
+        StubTracesChedsByMrn(dataApiClient, mrn, ched);
+
+        var logger = Substitute.For<ILogger<FinalisationConsumer>>();
+        var consumer = new FinalisationConsumer(logger, tracesClient, dataApiClient);
+
+        var context = BuildMessageContext(mrn, ched, finalState, isManualRelease: true);
+
+        // Act
+        await consumer.ConsumeAsync(context, TestContext.Current.CancellationToken);
+
+        // Assert
+        CallsTo(tracesClient, nameof(ITracesGatewayChedClient.ReleaseChedReservation)).Should().BeEmpty();
+        CallsTo(tracesClient, nameof(ITracesGatewayChedClient.DeleteChedReservation)).Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(FinalState.CancelledAfterArrival)]
+    [InlineData(FinalState.CancelledWhilePreLodged)]
+    public async Task ConsumeAsync_DeletesReservation_WhenFinalStateIsCancelled(string finalState)
+    {
+        // Arrange
+        var mrn = "25GBVLKTCO0HN7MUA4";
+        var ched = "CHEDA.GB.2026.1234567";
+
+        var dataApiClient = Substitute.For<ITradeImportsDataApiClient>();
+        var tracesClient = Substitute.For<ITracesGatewayChedClient>();
+
+        tracesClient
+            .DeleteChedReservation(ched, mrn, TestContext.Current.CancellationToken)
+            .Returns(Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)));
+
+        StubTracesChedsByMrn(dataApiClient, mrn, ched);
+
+        var logger = Substitute.For<ILogger<FinalisationConsumer>>();
+        var consumer = new FinalisationConsumer(logger, tracesClient, dataApiClient);
+
+        var context = BuildMessageContext(mrn, ched, finalState);
+
+        // Act
+        await consumer.ConsumeAsync(context, TestContext.Current.CancellationToken);
+
+        // Assert
+        CallsTo(tracesClient, nameof(ITracesGatewayChedClient.DeleteChedReservation))
+            .Should()
+            .ContainSingle()
+            .Which.Take(2)
+            .Should()
+            .Equal(ched, mrn);
+        CallsTo(dataApiClient, nameof(ITradeImportsDataApiClient.DeleteChedReservation))
+            .Should()
+            .ContainSingle()
+            .Which.Take(2)
+            .Should()
+            .Equal(ched, mrn);
+        CallsTo(tracesClient, nameof(ITracesGatewayChedClient.ReleaseChedReservation)).Should().BeEmpty();
+    }
+
+    private static IEnumerable<object?[]> CallsTo(object substitute, string methodName) =>
+        substitute
+            .ReceivedCalls()
+            .Where(call => call.GetMethodInfo().Name == methodName)
+            .Select(call => call.GetArguments());
+
+    private static IEnumerable<string> WarningMessages(ILogger logger) =>
+        logger
+            .ReceivedCalls()
+            .Where(call =>
+                call.GetMethodInfo().Name == nameof(ILogger.Log)
+                && call.GetArguments()[0] is Microsoft.Extensions.Logging.LogLevel.Warning
+            )
+            .Select(call => call.GetArguments()[2]?.ToString() ?? string.Empty);
 
     private static void StubTracesChedsByMrn(
         ITradeImportsDataApiClient dataApiClient,
@@ -435,7 +542,12 @@ public class FinalisationConsumerTests
         dataApiClient.GetTracesChedsByMrn(mrn, Arg.Any<CancellationToken>()).Returns(Task.FromResult(response));
     }
 
-    private static MessageContext BuildClearedMessageContext(string mrn, string ched)
+    private static MessageContext BuildMessageContext(
+        string mrn,
+        string ched,
+        string finalState = FinalState.Cleared,
+        bool isManualRelease = false
+    )
     {
         var customsEvent = new CustomsDeclarationEvent
         {
@@ -443,8 +555,8 @@ public class FinalisationConsumerTests
             Finalisation = new Finalisation
             {
                 ExternalVersion = 1,
-                FinalState = FinalState.Cleared,
-                IsManualRelease = false,
+                FinalState = finalState,
+                IsManualRelease = isManualRelease,
             },
             ClearanceRequest = new ClearanceRequest
             {
@@ -542,14 +654,6 @@ public class FinalisationConsumerTests
         // Assert: a warning should be logged indicating deserialisation
         var expectedMessage = $"Message for MRN {mrn} could not be deserialised";
 
-        logger
-            .Received(1)
-            .Log(
-                Microsoft.Extensions.Logging.LogLevel.Warning,
-                Arg.Any<Microsoft.Extensions.Logging.EventId>(),
-                Arg.Is<object>(o => (o != null ? o.ToString() : string.Empty) == expectedMessage),
-                Arg.Any<Exception>(),
-                Arg.Any<Func<object, Exception?, string>>()
-            );
+        WarningMessages(logger).Should().ContainSingle().Which.Should().Be(expectedMessage);
     }
 }

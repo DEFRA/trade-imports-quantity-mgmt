@@ -38,22 +38,26 @@ public class FinalisationConsumer(
             return;
         }
 
-        switch (message.Resource.Finalisation?.FinalState)
+        var finalisation = message.Resource.Finalisation;
+
+        switch (finalisation)
         {
-            case FinalState.Cleared when message.Resource.Finalisation?.IsManualRelease is false:
+            case {
+                FinalState: FinalState.Cleared
+                    or FinalState.Destroyed
+                    or FinalState.Seized
+                    or FinalState.ReleasedToKingsWarehouse,
+                IsManualRelease: false,
+            }:
                 await ProcessClearanceAsync(chedReferences, mrn, cancellationToken);
                 break;
 
-            case FinalState.CancelledAfterArrival:
-            case FinalState.CancelledWhilePreLodged:
+            case { FinalState: FinalState.CancelledAfterArrival or FinalState.CancelledWhilePreLodged }:
                 await ProcessCancellationAsync(chedReferences, mrn, cancellationToken);
                 break;
 
             default:
-                logger.LogInformation(
-                    "No action required for final state {FinalState}",
-                    message.Resource.Finalisation?.FinalState
-                );
+                logger.LogInformation("No action required for final state {FinalState}", finalisation?.FinalState);
                 break;
         }
     }
