@@ -304,7 +304,7 @@ public class FinalisationConsumerTests
         var logger = Substitute.For<ILogger<FinalisationConsumer>>();
         var consumer = new FinalisationConsumer(logger, tracesClient, dataApiClient);
 
-        var context = BuildClearedMessageContext(mrn, ched);
+        var context = BuildMessageContext(mrn, ched);
 
         // Act
         await consumer.ConsumeAsync(context, TestContext.Current.CancellationToken);
@@ -389,7 +389,7 @@ public class FinalisationConsumerTests
         var logger = Substitute.For<ILogger<FinalisationConsumer>>();
         var consumer = new FinalisationConsumer(logger, tracesClient, dataApiClient);
 
-        var context = BuildClearedMessageContext(mrn, ched);
+        var context = BuildMessageContext(mrn, ched);
 
         // Act
         await consumer.ConsumeAsync(context, TestContext.Current.CancellationToken);
@@ -409,6 +409,108 @@ public class FinalisationConsumerTests
 
         deletedChed.Should().Be(ched);
         deletedMrn.Should().Be(mrn);
+    }
+
+    [Theory]
+    [InlineData(FinalState.Cleared)]
+    [InlineData(FinalState.Destroyed)]
+    [InlineData(FinalState.Seized)]
+    [InlineData(FinalState.ReleasedToKingsWarehouse)]
+    public async Task ConsumeAsync_ReleasesReservation_WhenFinalStateIsReleasableAndNotManualRelease(string finalState)
+    {
+        // Arrange
+        var mrn = "25GBVLKTCO0HN7MUA4";
+        var ched = "CHEDA.GB.2026.1234567";
+
+        var dataApiClient = Substitute.For<ITradeImportsDataApiClient>();
+        var tracesClient = Substitute.For<ITracesGatewayChedClient>();
+
+        tracesClient
+            .ReleaseChedReservation(ched, mrn, TestContext.Current.CancellationToken)
+            .Returns(Task.FromResult(new HttpResponseMessage(HttpStatusCode.InternalServerError)));
+
+        StubTracesChedsByMrn(dataApiClient, mrn, ched);
+
+        var logger = Substitute.For<ILogger<FinalisationConsumer>>();
+        var consumer = new FinalisationConsumer(logger, tracesClient, dataApiClient);
+
+        var context = BuildMessageContext(mrn, ched, finalState);
+
+        // Act
+        await consumer.ConsumeAsync(context, TestContext.Current.CancellationToken);
+
+        // Assert
+        await tracesClient.Received(1).ReleaseChedReservation(ched, mrn, TestContext.Current.CancellationToken);
+        await tracesClient
+            .DidNotReceive()
+            .DeleteChedReservation(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(FinalState.Cleared)]
+    [InlineData(FinalState.Destroyed)]
+    [InlineData(FinalState.Seized)]
+    [InlineData(FinalState.ReleasedToKingsWarehouse)]
+    public async Task ConsumeAsync_DoesNotReleaseReservation_WhenManualRelease(string finalState)
+    {
+        // Arrange
+        var mrn = "25GBVLKTCO0HN7MUA4";
+        var ched = "CHEDA.GB.2026.1234567";
+
+        var dataApiClient = Substitute.For<ITradeImportsDataApiClient>();
+        var tracesClient = Substitute.For<ITracesGatewayChedClient>();
+
+        StubTracesChedsByMrn(dataApiClient, mrn, ched);
+
+        var logger = Substitute.For<ILogger<FinalisationConsumer>>();
+        var consumer = new FinalisationConsumer(logger, tracesClient, dataApiClient);
+
+        var context = BuildMessageContext(mrn, ched, finalState, isManualRelease: true);
+
+        // Act
+        await consumer.ConsumeAsync(context, TestContext.Current.CancellationToken);
+
+        // Assert
+        await tracesClient
+            .DidNotReceive()
+            .ReleaseChedReservation(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await tracesClient
+            .DidNotReceive()
+            .DeleteChedReservation(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(FinalState.CancelledAfterArrival)]
+    [InlineData(FinalState.CancelledWhilePreLodged)]
+    public async Task ConsumeAsync_DeletesReservation_WhenFinalStateIsCancelled(string finalState)
+    {
+        // Arrange
+        var mrn = "25GBVLKTCO0HN7MUA4";
+        var ched = "CHEDA.GB.2026.1234567";
+
+        var dataApiClient = Substitute.For<ITradeImportsDataApiClient>();
+        var tracesClient = Substitute.For<ITracesGatewayChedClient>();
+
+        tracesClient
+            .DeleteChedReservation(ched, mrn, TestContext.Current.CancellationToken)
+            .Returns(Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)));
+
+        StubTracesChedsByMrn(dataApiClient, mrn, ched);
+
+        var logger = Substitute.For<ILogger<FinalisationConsumer>>();
+        var consumer = new FinalisationConsumer(logger, tracesClient, dataApiClient);
+
+        var context = BuildMessageContext(mrn, ched, finalState);
+
+        // Act
+        await consumer.ConsumeAsync(context, TestContext.Current.CancellationToken);
+
+        // Assert
+        await tracesClient.Received(1).DeleteChedReservation(ched, mrn, TestContext.Current.CancellationToken);
+        await dataApiClient.Received(1).DeleteChedReservation(ched, mrn, TestContext.Current.CancellationToken);
+        await tracesClient
+            .DidNotReceive()
+            .ReleaseChedReservation(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     private static void StubTracesChedsByMrn(
@@ -435,7 +537,12 @@ public class FinalisationConsumerTests
         dataApiClient.GetTracesChedsByMrn(mrn, Arg.Any<CancellationToken>()).Returns(Task.FromResult(response));
     }
 
-    private static MessageContext BuildClearedMessageContext(string mrn, string ched)
+    private static MessageContext BuildMessageContext(
+        string mrn,
+        string ched,
+        string finalState = FinalState.Cleared,
+        bool isManualRelease = false
+    )
     {
         var customsEvent = new CustomsDeclarationEvent
         {
@@ -443,8 +550,8 @@ public class FinalisationConsumerTests
             Finalisation = new Finalisation
             {
                 ExternalVersion = 1,
-                FinalState = FinalState.Cleared,
-                IsManualRelease = false,
+                FinalState = finalState,
+                IsManualRelease = isManualRelease,
             },
             ClearanceRequest = new ClearanceRequest
             {

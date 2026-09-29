@@ -40,6 +40,9 @@ public class FinalisationConsumer(
 
         switch (message.Resource.Finalisation?.FinalState)
         {
+            case FinalState.Destroyed when message.Resource.Finalisation?.IsManualRelease is false:
+            case FinalState.Seized when message.Resource.Finalisation?.IsManualRelease is false:
+            case FinalState.ReleasedToKingsWarehouse when message.Resource.Finalisation?.IsManualRelease is false:
             case FinalState.Cleared when message.Resource.Finalisation?.IsManualRelease is false:
                 await ProcessClearanceAsync(chedReferences, mrn, cancellationToken);
                 break;
