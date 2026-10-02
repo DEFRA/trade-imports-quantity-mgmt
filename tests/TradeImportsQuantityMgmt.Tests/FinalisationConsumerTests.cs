@@ -13,12 +13,17 @@ using Refit;
 using Trade.Gateway.Api.Client.Clients;
 using Trade.Gateway.Api.Contract.Certificate;
 using Trade.Gateway.Api.Contract.Customs;
+using TradeImportsQuantityMgmt.Features.QuantityManagement;
 using TradeImportsQuantityMgmt.Features.ResourceEvents;
 
 namespace TradeImportsQuantityMgmt.Tests;
 
-public class FinalisationConsumerTests
+public sealed class FinalisationConsumerTests : IDisposable
 {
+    private readonly QuantityManagementOutcomeCapture _outcomes = new();
+
+    public void Dispose() => _outcomes.Dispose();
+
     [Fact]
     public async Task ConsumeAsync_LogsWarning_WhenReleaseFails()
     {
@@ -42,13 +47,22 @@ public class FinalisationConsumerTests
 
         tracesClient
             .ReleaseChedReservation(Arg.Any<string>(), Arg.Any<string>(), TestContext.Current.CancellationToken)
-            .Returns(Task.FromResult(new HttpResponseMessage(HttpStatusCode.InternalServerError)));
+            .Returns(
+                Task.FromResult(
+                    new HttpResponseMessage(HttpStatusCode.Conflict)
+                    {
+                        Content = new StringContent(
+                            """{"title":"Conflict","detail":"Nothing reserved to release","reason":"NOT_RESERVED"}"""
+                        ),
+                    }
+                )
+            );
 
         StubTracesChedsByMrn(dataApiClient, mrn, ched);
 
         var logger = Substitute.For<ILogger<FinalisationConsumer>>();
 
-        var consumer = new FinalisationConsumer(logger, tracesClient, dataApiClient);
+        var consumer = new FinalisationConsumer(logger, tracesClient, dataApiClient, _outcomes.Recorder);
 
         var customsEvent = new CustomsDeclarationEvent
         {
@@ -113,9 +127,14 @@ public class FinalisationConsumerTests
         await tracesClient.Received(1).ReleaseChedReservation(ched, mrn, TestContext.Current.CancellationToken);
 
         var expectedMessage =
-            $"Releasing goods for MRN {mrn} - CHED {ched} returned response code {HttpStatusCode.InternalServerError}";
+            $"Quantity Management ReleaseReservation for CHED {ched} - MRN {mrn} returned outcome NOT_RESERVED with response code 409 and detail Nothing reserved to release";
 
-        WarningMessages(logger).Should().ContainSingle().Which.Should().Be(expectedMessage);
+        WarningMessages(_outcomes.Logger).Should().ContainSingle().Which.Should().Be(expectedMessage);
+        _outcomes
+            .Measurements.Should()
+            .ContainSingle()
+            .Which.Should()
+            .BeEquivalentTo(new OutcomeMeasurement("ReleaseReservation", "NOT_RESERVED", "409"));
     }
 
     [Fact]
@@ -135,7 +154,7 @@ public class FinalisationConsumerTests
 
         var logger = Substitute.For<ILogger<FinalisationConsumer>>();
 
-        var consumer = new FinalisationConsumer(logger, tracesClient, dataApiClient);
+        var consumer = new FinalisationConsumer(logger, tracesClient, dataApiClient, _outcomes.Recorder);
 
         var customsEvent = new CustomsDeclarationEvent
         {
@@ -200,9 +219,14 @@ public class FinalisationConsumerTests
         await tracesClient.Received(1).DeleteChedReservation(ched, mrn, TestContext.Current.CancellationToken);
 
         var expectedMessage =
-            $"Deleting reservation for MRN {mrn} - CHED {ched} returned response code {HttpStatusCode.InternalServerError}";
+            $"Quantity Management DeleteReservation for CHED {ched} - MRN {mrn} returned outcome Unknown with response code 500 and detail (null)";
 
-        WarningMessages(logger).Should().ContainSingle().Which.Should().Be(expectedMessage);
+        WarningMessages(_outcomes.Logger).Should().ContainSingle().Which.Should().Be(expectedMessage);
+        _outcomes
+            .Measurements.Should()
+            .ContainSingle()
+            .Which.Should()
+            .BeEquivalentTo(new OutcomeMeasurement("DeleteReservation", "Unknown", "500"));
     }
 
     [Fact]
@@ -285,12 +309,19 @@ public class FinalisationConsumerTests
             .Returns(Task.CompletedTask);
 
         var logger = Substitute.For<ILogger<FinalisationConsumer>>();
-        var consumer = new FinalisationConsumer(logger, tracesClient, dataApiClient);
+        var consumer = new FinalisationConsumer(logger, tracesClient, dataApiClient, _outcomes.Recorder);
 
         var context = BuildMessageContext(mrn, ched);
 
         // Act
         await consumer.ConsumeAsync(context, TestContext.Current.CancellationToken);
+
+        // Assert: the successful release outcome was recorded.
+        _outcomes
+            .Measurements.Should()
+            .ContainSingle()
+            .Which.Should()
+            .BeEquivalentTo(new OutcomeMeasurement("ReleaseReservation", "Success", "200"));
 
         // Assert: the write targeted this declaration, and only its consumed allocation was
         // persisted, at "Consumed" status - not the other declaration's reserved allocation.
@@ -370,7 +401,7 @@ public class FinalisationConsumerTests
             .Returns(Task.CompletedTask);
 
         var logger = Substitute.For<ILogger<FinalisationConsumer>>();
-        var consumer = new FinalisationConsumer(logger, tracesClient, dataApiClient);
+        var consumer = new FinalisationConsumer(logger, tracesClient, dataApiClient, _outcomes.Recorder);
 
         var context = BuildMessageContext(mrn, ched);
 
@@ -415,7 +446,7 @@ public class FinalisationConsumerTests
         StubTracesChedsByMrn(dataApiClient, mrn, ched);
 
         var logger = Substitute.For<ILogger<FinalisationConsumer>>();
-        var consumer = new FinalisationConsumer(logger, tracesClient, dataApiClient);
+        var consumer = new FinalisationConsumer(logger, tracesClient, dataApiClient, _outcomes.Recorder);
 
         var context = BuildMessageContext(mrn, ched, finalState);
 
@@ -449,7 +480,7 @@ public class FinalisationConsumerTests
         StubTracesChedsByMrn(dataApiClient, mrn, ched);
 
         var logger = Substitute.For<ILogger<FinalisationConsumer>>();
-        var consumer = new FinalisationConsumer(logger, tracesClient, dataApiClient);
+        var consumer = new FinalisationConsumer(logger, tracesClient, dataApiClient, _outcomes.Recorder);
 
         var context = BuildMessageContext(mrn, ched, finalState, isManualRelease: true);
 
@@ -480,7 +511,7 @@ public class FinalisationConsumerTests
         StubTracesChedsByMrn(dataApiClient, mrn, ched);
 
         var logger = Substitute.For<ILogger<FinalisationConsumer>>();
-        var consumer = new FinalisationConsumer(logger, tracesClient, dataApiClient);
+        var consumer = new FinalisationConsumer(logger, tracesClient, dataApiClient, _outcomes.Recorder);
 
         var context = BuildMessageContext(mrn, ched, finalState);
 
@@ -614,7 +645,7 @@ public class FinalisationConsumerTests
         var tracesClient = Substitute.For<ITracesGatewayChedClient>();
         var logger = Substitute.For<ILogger<FinalisationConsumer>>();
 
-        var consumer = new FinalisationConsumer(logger, tracesClient, dataApiClient);
+        var consumer = new FinalisationConsumer(logger, tracesClient, dataApiClient, _outcomes.Recorder);
 
         var resourceEvent = new ResourceEvent<CustomsDeclarationEvent>
         {

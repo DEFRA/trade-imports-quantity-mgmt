@@ -5,6 +5,7 @@ namespace Infrastructure;
 [ExcludeFromCodeCoverage]
 public static class MetricNames
 {
-    public const string MeterName = "Trade.Imports.Quantity.Mgmt";
+    // Must match ApiMetrics:MeterName, as that is the only meter the EMF exporter publishes.
+    public const string MeterName = "Defra.Trade.Imports.Quantity.Mgmt";
     public const string TraceKey = "x-cdp-request-id";
 }
