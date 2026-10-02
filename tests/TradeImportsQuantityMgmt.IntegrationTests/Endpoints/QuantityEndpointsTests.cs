@@ -254,10 +254,9 @@ public class QuantityEndpointsTests(TradeGatewayWebApplicationFactory factory, I
     [Fact]
     public async Task Put_ReturnsGatewayProblemReason_WhenTradeGatewayReturnsAProblem()
     {
-        // ChedReservationProblemDetails.Reason is a get-only property computed from
-        // Extensions["reason"], but System.Text.Json still claims that key for the (unwritable)
-        // Reason property during deserialisation, so it never reaches Extensions and Reason is
-        // always null - the endpoint reads "reason" back out of the raw body itself instead.
+        // The gateway's ChedReservationProblemDetails drops "reason" during deserialisation (its
+        // get-only Reason property claims the key), so the endpoint reads the problem as the
+        // framework ProblemDetails to keep "reason" in the extensions it passes through.
         await WireMockStubber.StubChedPutReservationAsync(
             factory.WireMockBaseUrl,
             Mrn,

@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.Metrics;
 using Defra.TradeImports.Api.Metrics;
 using Defra.TradeImports.EmfExporter;
 using Defra.TradeImports.Tracing;
@@ -13,6 +14,7 @@ using Serilog;
 using Trade.Gateway.Api.Client.Extensions;
 using TradeImportsQuantityMgmt.Config;
 using TradeImportsQuantityMgmt.Endpoints;
+using TradeImportsQuantityMgmt.Features.QuantityManagement;
 using TradeImportsQuantityMgmt.Features.ResourceEvents;
 using TradeImportsQuantityMgmt.Health;
 using TradeImportsQuantityMgmt.Utils;
@@ -70,6 +72,12 @@ static void ConfigureServices(WebApplicationBuilder builder)
         sp => sp.GetRequiredService<IOptions<ResourceEventConsumerOptions>>().Value.ResourceEventsQueueUrl,
         message => message.IsFinalisation()
     );
+
+    services.AddSingleton(sp => new QuantityManagementMetrics(
+        sp.GetRequiredService<IMeterFactory>(),
+        MetricNames.MeterName
+    ));
+    services.AddSingleton<QuantityManagementOutcomeRecorder>();
 
     builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 

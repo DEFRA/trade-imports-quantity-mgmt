@@ -1,15 +1,17 @@
-using System.Text.Json;
+using System.Net;
 using Defra.TradeImportsDataApi.Api.Client;
 using Defra.TradeImportsDataApi.Domain.Traces;
 using Refit;
 using Trade.Gateway.Api.Client.Clients;
 using Trade.Gateway.Api.Contract.Customs;
 using TradeImportsQuantityMgmt.Contract;
+using TradeImportsQuantityMgmt.Features.QuantityManagement;
 using TradeImportsQuantityMgmt.Filters;
 using TradeImportsQuantityMgmt.Mappings;
 using TradeImportsQuantityMgmt.Utils;
 using ChedDeclarationReservation = TradeImportsQuantityMgmt.Contract.ChedDeclarationReservation;
 using ChedReservationRequest = TradeImportsQuantityMgmt.Contract.ChedReservationRequest;
+using ProblemDetails = Microsoft.AspNetCore.Mvc.ProblemDetails;
 
 namespace TradeImportsQuantityMgmt.Endpoints;
 
@@ -45,6 +47,7 @@ public static class QuantityEndpoints
         ChedReservationRequest request,
         ITracesGatewayChedClient tracesGatewayChedClient,
         ITradeImportsDataApiClient tradeImportsDataApiClient,
+        QuantityManagementOutcomeRecorder outcomeRecorder,
         CancellationToken cancellationToken
     )
     {
@@ -56,10 +59,19 @@ public static class QuantityEndpoints
         // blind overwrite.
         var etag = await tradeImportsDataApiClient.GetChedReservationETag(chedId, mrn, cancellationToken);
         Reservation reservation;
-        ChedReservationProblemDetails? problem = null;
-        string? problemContent = null;
+        IDictionary<string, object?>? extensions = null;
         if (response.IsSuccessful)
         {
+            outcomeRecorder.Record(
+                QuantityManagementOutcome.FromResponse(
+                    QuantityManagementOperation.PutReservation,
+                    chedId,
+                    mrn,
+                    response.StatusCode ?? HttpStatusCode.OK,
+                    null
+                )
+            );
+
             reservation = response.Content.ToReservationForDataApi(chedId, mrn);
             await tradeImportsDataApiClient.PutChedReservation(chedId, mrn, reservation, etag, cancellationToken);
 
@@ -70,9 +82,15 @@ public static class QuantityEndpoints
         }
         else if (response.Error is ApiException apiException)
         {
-            problem = await apiException.GetContentAsAsync<ChedReservationProblemDetails>();
-            problemContent = apiException.Content;
-            TryGetReason(problemContent, out var unsuccessfulReason);
+            var problem = await apiException.GetContentAsAsync<ProblemDetails>();
+            var outcome = QuantityManagementOutcome.FromResponse(
+                QuantityManagementOperation.PutReservation,
+                chedId,
+                mrn,
+                apiException.StatusCode,
+                problem
+            );
+            outcomeRecorder.Record(outcome);
 
             reservation = new Reservation()
             {
@@ -80,21 +98,11 @@ public static class QuantityEndpoints
                 Mrn = mrn,
                 Status = ReservationStatus.Unsuccessful,
                 Timestamp = DateTime.UtcNow,
-                UnsuccessfulReason = unsuccessfulReason,
+                UnsuccessfulReason = outcome.Reason,
             };
             await tradeImportsDataApiClient.PutChedReservation(chedId, mrn, reservation, etag, cancellationToken);
-        }
 
-        // ChedReservationProblemDetails.Reason is a get-only property computed from Extensions["reason"],
-        // but that means System.Text.Json already claims the "reason" key for the (unwritable) Reason
-        // property during deserialisation, so it never actually reaches Extensions and Reason is always
-        // null. Read "reason" back out of the raw body ourselves so it isn't silently lost.
-        Dictionary<string, object?>? extensions = null;
-        if (problem is not null)
-        {
-            extensions = problem.Extensions?.ToDictionary(x => x.Key, object? (x) => x.Value) ?? [];
-            if (TryGetReason(problemContent, out var reason))
-                extensions["reason"] = reason;
+            extensions = problem?.Extensions;
         }
 
         return Results.Problem(
@@ -102,34 +110,5 @@ public static class QuantityEndpoints
             detail: response.Error.Message,
             extensions: extensions
         );
-    }
-
-    private static bool TryGetReason(string? content, out string? reason)
-    {
-        reason = null;
-        if (string.IsNullOrEmpty(content))
-            return false;
-
-        try
-        {
-            using var document = JsonDocument.Parse(content);
-            foreach (var property in document.RootElement.EnumerateObject())
-            {
-                if (
-                    string.Equals(property.Name, "reason", StringComparison.OrdinalIgnoreCase)
-                    && property.Value.ValueKind == JsonValueKind.String
-                )
-                {
-                    reason = property.Value.GetString();
-                    return reason is not null;
-                }
-            }
-        }
-        catch (JsonException)
-        {
-            // Not JSON, or not an object - nothing to extract.
-        }
-
-        return false;
     }
 }

@@ -1,9 +1,12 @@
+using System.Text.Json;
 using Defra.TradeImportsDataApi.Api.Client;
 using Defra.TradeImportsDataApi.Domain.CustomsDeclaration;
 using Defra.TradeImportsDataApi.Domain.Events;
 using Defra.TradeImportsDataApi.Domain.Traces;
 using Infrastructure.Messaging.Consuming;
+using Microsoft.AspNetCore.Mvc;
 using Trade.Gateway.Api.Client.Clients;
+using TradeImportsQuantityMgmt.Features.QuantityManagement;
 using TradeImportsQuantityMgmt.Mappings;
 using TradeImportsQuantityMgmt.Utils;
 
@@ -12,7 +15,8 @@ namespace TradeImportsQuantityMgmt.Features.ResourceEvents;
 public class FinalisationConsumer(
     ILogger<FinalisationConsumer> logger,
     ITracesGatewayChedClient tracesGatewayChedClient,
-    ITradeImportsDataApiClient tradeImportsDataApiClient
+    ITradeImportsDataApiClient tradeImportsDataApiClient,
+    QuantityManagementOutcomeRecorder outcomeRecorder
 ) : IMessageConsumer
 {
     public async Task ConsumeAsync(MessageContext context, CancellationToken cancellationToken = default)
@@ -82,18 +86,21 @@ public class FinalisationConsumer(
     {
         logger.LogInformation("Releasing goods for MRN {MovementReferenceNumber} - CHED {Ched}", mrn, chedReference);
 
-        var response = await tracesGatewayChedClient.ReleaseChedReservation(chedReference, mrn, cancellationToken);
+        using var response = await tracesGatewayChedClient.ReleaseChedReservation(
+            chedReference,
+            mrn,
+            cancellationToken
+        );
+        var outcome = await RecordOutcomeAsync(
+            QuantityManagementOperation.ReleaseReservation,
+            chedReference,
+            mrn,
+            response,
+            cancellationToken
+        );
 
-        if (!response.IsSuccessStatusCode)
-        {
-            logger.LogWarning(
-                "Releasing goods for MRN {MovementReferenceNumber} - CHED {Ched} returned response code {ResponseCode}",
-                mrn,
-                chedReference,
-                response.StatusCode
-            );
+        if (!outcome.IsSuccess)
             return;
-        }
 
         await SyncReservationWithDataApiAsync(chedReference, mrn, cancellationToken);
     }
@@ -138,19 +145,57 @@ public class FinalisationConsumer(
 
     private async Task DeleteReservationAsync(string chedReference, string mrn, CancellationToken cancellationToken)
     {
-        var response = await tracesGatewayChedClient.DeleteChedReservation(chedReference, mrn, cancellationToken);
+        using var response = await tracesGatewayChedClient.DeleteChedReservation(chedReference, mrn, cancellationToken);
+        var outcome = await RecordOutcomeAsync(
+            QuantityManagementOperation.DeleteReservation,
+            chedReference,
+            mrn,
+            response,
+            cancellationToken
+        );
 
-        if (!response.IsSuccessStatusCode)
-        {
-            logger.LogWarning(
-                "Deleting reservation for MRN {MovementReferenceNumber} - CHED {Ched} returned response code {ResponseCode}",
-                mrn,
-                chedReference,
-                response.StatusCode
-            );
+        if (!outcome.IsSuccess)
             return;
-        }
 
         await tradeImportsDataApiClient.DeleteChedReservation(chedReference, mrn, cancellationToken);
+    }
+
+    private async Task<QuantityManagementOutcome> RecordOutcomeAsync(
+        QuantityManagementOperation operation,
+        string chedReference,
+        string mrn,
+        HttpResponseMessage response,
+        CancellationToken cancellationToken
+    )
+    {
+        // Only an unsuccessful response carries problem details worth reading.
+        var problem = response.IsSuccessStatusCode ? null : await ReadProblemAsync(response, cancellationToken);
+
+        var outcome = QuantityManagementOutcome.FromResponse(
+            operation,
+            chedReference,
+            mrn,
+            response.StatusCode,
+            problem
+        );
+        outcomeRecorder.Record(outcome);
+
+        return outcome;
+    }
+
+    private static async Task<ProblemDetails?> ReadProblemAsync(
+        HttpResponseMessage response,
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            return await response.Content.ReadFromJsonAsync<ProblemDetails>(cancellationToken);
+        }
+        catch (JsonException)
+        {
+            // An empty or non-JSON body (e.g. from a proxy) - there are no problem details to read.
+            return null;
+        }
     }
 }
