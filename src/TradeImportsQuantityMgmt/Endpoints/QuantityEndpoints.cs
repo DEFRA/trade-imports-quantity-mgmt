@@ -58,8 +58,7 @@ public static class QuantityEndpoints
         // blind overwrite.
         var etag = await tradeImportsDataApiClient.GetChedReservationETag(chedId, mrn, cancellationToken);
         Reservation reservation;
-        ChedReservationProblemDetails? problem = null;
-        QuantityManagementOutcome? outcome = null;
+        Dictionary<string, object?>? extensions = null;
         if (response.IsSuccessful)
         {
             outcomeRecorder.Record(
@@ -82,8 +81,7 @@ public static class QuantityEndpoints
         }
         else if (response.Error is ApiException apiException)
         {
-            problem = await apiException.GetContentAsAsync<ChedReservationProblemDetails>();
-            outcome = QuantityManagementOutcome.FromResponse(
+            var outcome = QuantityManagementOutcome.FromResponse(
                 QuantityManagementOperation.PutReservation,
                 chedId,
                 mrn,
@@ -101,16 +99,16 @@ public static class QuantityEndpoints
                 UnsuccessfulReason = outcome.Reason,
             };
             await tradeImportsDataApiClient.PutChedReservation(chedId, mrn, reservation, etag, cancellationToken);
-        }
 
-        // ChedReservationProblemDetails.Reason never makes it into Extensions during deserialisation
-        // (see QuantityManagementOutcome), so put the reason read from the raw body back in.
-        Dictionary<string, object?>? extensions = null;
-        if (problem is not null)
-        {
-            extensions = problem.Extensions?.ToDictionary(x => x.Key, object? (x) => x.Value) ?? [];
-            if (outcome?.Reason is { } reason)
-                extensions["reason"] = reason;
+            // ChedReservationProblemDetails.Reason never makes it into Extensions during deserialisation
+            // (see QuantityManagementOutcome), so put the reason read from the raw body back in.
+            var problem = await apiException.GetContentAsAsync<ChedReservationProblemDetails>();
+            if (problem is not null)
+            {
+                extensions = problem.Extensions?.ToDictionary(x => x.Key, object? (x) => x.Value) ?? [];
+                if (outcome.Reason is { } reason)
+                    extensions["reason"] = reason;
+            }
         }
 
         return Results.Problem(
