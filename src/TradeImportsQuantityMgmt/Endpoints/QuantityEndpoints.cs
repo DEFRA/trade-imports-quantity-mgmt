@@ -11,6 +11,7 @@ using TradeImportsQuantityMgmt.Mappings;
 using TradeImportsQuantityMgmt.Utils;
 using ChedDeclarationReservation = TradeImportsQuantityMgmt.Contract.ChedDeclarationReservation;
 using ChedReservationRequest = TradeImportsQuantityMgmt.Contract.ChedReservationRequest;
+using ProblemDetails = Microsoft.AspNetCore.Mvc.ProblemDetails;
 
 namespace TradeImportsQuantityMgmt.Endpoints;
 
@@ -58,7 +59,7 @@ public static class QuantityEndpoints
         // blind overwrite.
         var etag = await tradeImportsDataApiClient.GetChedReservationETag(chedId, mrn, cancellationToken);
         Reservation reservation;
-        Dictionary<string, object?>? extensions = null;
+        IDictionary<string, object?>? extensions = null;
         if (response.IsSuccessful)
         {
             outcomeRecorder.Record(
@@ -81,12 +82,13 @@ public static class QuantityEndpoints
         }
         else if (response.Error is ApiException apiException)
         {
+            var problem = await apiException.GetContentAsAsync<ProblemDetails>();
             var outcome = QuantityManagementOutcome.FromResponse(
                 QuantityManagementOperation.PutReservation,
                 chedId,
                 mrn,
                 apiException.StatusCode,
-                apiException.Content
+                problem
             );
             outcomeRecorder.Record(outcome);
 
@@ -100,15 +102,7 @@ public static class QuantityEndpoints
             };
             await tradeImportsDataApiClient.PutChedReservation(chedId, mrn, reservation, etag, cancellationToken);
 
-            // ChedReservationProblemDetails.Reason never makes it into Extensions during deserialisation
-            // (see QuantityManagementOutcome), so put the reason read from the raw body back in.
-            var problem = await apiException.GetContentAsAsync<ChedReservationProblemDetails>();
-            if (problem is not null)
-            {
-                extensions = problem.Extensions?.ToDictionary(x => x.Key, object? (x) => x.Value) ?? [];
-                if (outcome.Reason is { } reason)
-                    extensions["reason"] = reason;
-            }
+            extensions = problem?.Extensions;
         }
 
         return Results.Problem(

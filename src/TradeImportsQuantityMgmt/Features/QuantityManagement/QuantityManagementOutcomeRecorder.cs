@@ -26,12 +26,13 @@ public class QuantityManagementOutcomeRecorder(
         else
         {
             logger.LogWarning(
-                "Quantity Management {Operation} for CHED {Ched} - MRN {MovementReferenceNumber} returned outcome {Outcome} with response code {ResponseCode} and detail {Detail}",
+                "Quantity Management {Operation} for CHED {Ched} - MRN {MovementReferenceNumber} returned outcome {Outcome} with response code {ResponseCode}, reason {Reason} and detail {Detail}",
                 outcome.Operation,
                 outcome.ChedId,
                 outcome.Mrn,
                 outcome.Outcome,
                 (int)outcome.StatusCode,
+                outcome.Reason,
                 outcome.Detail
             );
         }

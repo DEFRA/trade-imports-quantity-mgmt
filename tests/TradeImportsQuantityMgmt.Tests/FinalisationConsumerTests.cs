@@ -52,7 +52,7 @@ public sealed class FinalisationConsumerTests : IDisposable
                     new HttpResponseMessage(HttpStatusCode.Conflict)
                     {
                         Content = new StringContent(
-                            """{"title":"Conflict","detail":"Nothing reserved to release","reason":"NOT_RESERVED"}"""
+                            """{"title":"Conflict","detail":"Nothing reserved to release","reason":"InappropriateStatus"}"""
                         ),
                     }
                 )
@@ -127,14 +127,14 @@ public sealed class FinalisationConsumerTests : IDisposable
         await tracesClient.Received(1).ReleaseChedReservation(ched, mrn, TestContext.Current.CancellationToken);
 
         var expectedMessage =
-            $"Quantity Management ReleaseReservation for CHED {ched} - MRN {mrn} returned outcome NOT_RESERVED with response code 409 and detail Nothing reserved to release";
+            $"Quantity Management ReleaseReservation for CHED {ched} - MRN {mrn} returned outcome Unsuccessful with response code 409, reason InappropriateStatus and detail Nothing reserved to release";
 
         WarningMessages(_outcomes.Logger).Should().ContainSingle().Which.Should().Be(expectedMessage);
         _outcomes
             .Measurements.Should()
             .ContainSingle()
             .Which.Should()
-            .BeEquivalentTo(new OutcomeMeasurement("ReleaseReservation", "NOT_RESERVED", "409"));
+            .BeEquivalentTo(new OutcomeMeasurement("ReleaseReservation", "Unsuccessful", "InappropriateStatus", "409"));
     }
 
     [Fact]
@@ -219,14 +219,14 @@ public sealed class FinalisationConsumerTests : IDisposable
         await tracesClient.Received(1).DeleteChedReservation(ched, mrn, TestContext.Current.CancellationToken);
 
         var expectedMessage =
-            $"Quantity Management DeleteReservation for CHED {ched} - MRN {mrn} returned outcome Unknown with response code 500 and detail (null)";
+            $"Quantity Management DeleteReservation for CHED {ched} - MRN {mrn} returned outcome Unsuccessful with response code 500, reason (null) and detail (null)";
 
         WarningMessages(_outcomes.Logger).Should().ContainSingle().Which.Should().Be(expectedMessage);
         _outcomes
             .Measurements.Should()
             .ContainSingle()
             .Which.Should()
-            .BeEquivalentTo(new OutcomeMeasurement("DeleteReservation", "Unknown", "500"));
+            .BeEquivalentTo(new OutcomeMeasurement("DeleteReservation", "Unsuccessful", "Unknown", "500"));
     }
 
     [Fact]
@@ -321,7 +321,7 @@ public sealed class FinalisationConsumerTests : IDisposable
             .Measurements.Should()
             .ContainSingle()
             .Which.Should()
-            .BeEquivalentTo(new OutcomeMeasurement("ReleaseReservation", "Success", "200"));
+            .BeEquivalentTo(new OutcomeMeasurement("ReleaseReservation", "Success", "None", "200"));
 
         // Assert: the write targeted this declaration, and only its consumed allocation was
         // persisted, at "Consumed" status - not the other declaration's reserved allocation.

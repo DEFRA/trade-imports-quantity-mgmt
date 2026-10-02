@@ -1,5 +1,7 @@
 using System.Net;
+using System.Text.Json;
 using AwesomeAssertions;
+using Microsoft.AspNetCore.Mvc;
 using TradeImportsQuantityMgmt.Features.QuantityManagement;
 
 namespace TradeImportsQuantityMgmt.Tests;
@@ -17,7 +19,7 @@ public class QuantityManagementOutcomeTests
             Ched,
             Mrn,
             HttpStatusCode.OK,
-            """{"reason":"IGNORED"}"""
+            null
         );
 
         outcome.IsSuccess.Should().BeTrue();
@@ -27,54 +29,61 @@ public class QuantityManagementOutcomeTests
     }
 
     [Fact]
-    public void FromResponse_UsesProblemReasonAndDetail_WhenUnsuccessful()
+    public void FromResponse_IsUnsuccessful_WithProblemReasonAndDetail()
     {
         var outcome = QuantityManagementOutcome.FromResponse(
             QuantityManagementOperation.PutReservation,
             Ched,
             Mrn,
             HttpStatusCode.Conflict,
-            """{"title":"Conflict","Detail":"Not enough quantity","Reason":"INSUFFICIENT_QUANTITY"}"""
+            ParseProblem("""{"title":"Conflict","detail":"Not enough quantity","reason":"QuantitiesInsufficient"}""")
         );
 
         outcome.IsSuccess.Should().BeFalse();
-        outcome.Outcome.Should().Be("INSUFFICIENT_QUANTITY");
-        outcome.Reason.Should().Be("INSUFFICIENT_QUANTITY");
+        outcome.Outcome.Should().Be(QuantityManagementOutcome.UnsuccessfulOutcome);
+        outcome.Reason.Should().Be("QuantitiesInsufficient");
         outcome.Detail.Should().Be("Not enough quantity");
     }
 
     [Theory]
     [InlineData(null)]
-    [InlineData("")]
-    [InlineData("not json")]
-    [InlineData("[]")]
+    [InlineData("""{"title":"Server error"}""")]
     [InlineData("""{"reason":42}""")]
-    public void FromResponse_IsUnknown_WhenUnsuccessfulWithoutReason(string? content)
+    public void FromResponse_HasNoReason_WhenProblemDoesNotSupplyOne(string? problemJson)
     {
         var outcome = QuantityManagementOutcome.FromResponse(
             QuantityManagementOperation.ReleaseReservation,
             Ched,
             Mrn,
             HttpStatusCode.InternalServerError,
-            content
+            problemJson is null ? null : ParseProblem(problemJson)
         );
 
-        outcome.Outcome.Should().Be(QuantityManagementOutcome.UnknownOutcome);
+        outcome.Outcome.Should().Be(QuantityManagementOutcome.UnsuccessfulOutcome);
         outcome.Reason.Should().BeNull();
     }
 
-    [Fact]
-    public void Record_EmitsOutcomeMetric()
+    [Theory]
+    [InlineData(HttpStatusCode.OK, null, "Success", "None")]
+    [InlineData(HttpStatusCode.Conflict, "QuantitiesInsufficient", "Unsuccessful", "QuantitiesInsufficient")]
+    [InlineData(HttpStatusCode.InternalServerError, null, "Unsuccessful", "Unknown")]
+    public void Record_EmitsOutcomeMetric(
+        HttpStatusCode statusCode,
+        string? reason,
+        string expectedOutcome,
+        string expectedReason
+    )
     {
         using var capture = new QuantityManagementOutcomeCapture();
 
         capture.Recorder.Record(
-            QuantityManagementOutcome.FromResponse(
+            new QuantityManagementOutcome(
                 QuantityManagementOperation.DeleteReservation,
                 Ched,
                 Mrn,
-                HttpStatusCode.NotFound,
-                """{"reason":"RESERVATION_NOT_FOUND"}"""
+                statusCode,
+                reason,
+                null
             )
         );
 
@@ -82,6 +91,16 @@ public class QuantityManagementOutcomeTests
             .Measurements.Should()
             .ContainSingle()
             .Which.Should()
-            .BeEquivalentTo(new OutcomeMeasurement("DeleteReservation", "RESERVATION_NOT_FOUND", "404"));
+            .BeEquivalentTo(
+                new OutcomeMeasurement(
+                    "DeleteReservation",
+                    expectedOutcome,
+                    expectedReason,
+                    ((int)statusCode).ToString()
+                )
+            );
     }
+
+    private static ProblemDetails ParseProblem(string json) =>
+        JsonSerializer.Deserialize<ProblemDetails>(json, JsonSerializerOptions.Web)!;
 }

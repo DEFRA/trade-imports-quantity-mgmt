@@ -5,7 +5,7 @@ using TradeImportsQuantityMgmt.Features.QuantityManagement;
 
 namespace TradeImportsQuantityMgmt.Tests;
 
-public record OutcomeMeasurement(string Operation, string Outcome, string StatusCode);
+public record OutcomeMeasurement(string Operation, string Outcome, string Reason, string StatusCode);
 
 /// <summary>
 /// A <see cref="QuantityManagementOutcomeRecorder"/> wired to a substitute logger and a private
@@ -37,6 +37,7 @@ public sealed class QuantityManagementOutcomeCapture : IDisposable
                         new OutcomeMeasurement(
                             values[QuantityManagementMetrics.Constants.Tags.Operation]!,
                             values[QuantityManagementMetrics.Constants.Tags.Outcome]!,
+                            values[QuantityManagementMetrics.Constants.Tags.Reason]!,
                             values[QuantityManagementMetrics.Constants.Tags.StatusCode]!
                         )
                     );

@@ -1,8 +1,10 @@
+using System.Text.Json;
 using Defra.TradeImportsDataApi.Api.Client;
 using Defra.TradeImportsDataApi.Domain.CustomsDeclaration;
 using Defra.TradeImportsDataApi.Domain.Events;
 using Defra.TradeImportsDataApi.Domain.Traces;
 using Infrastructure.Messaging.Consuming;
+using Microsoft.AspNetCore.Mvc;
 using Trade.Gateway.Api.Client.Clients;
 using TradeImportsQuantityMgmt.Features.QuantityManagement;
 using TradeImportsQuantityMgmt.Mappings;
@@ -167,17 +169,33 @@ public class FinalisationConsumer(
     )
     {
         // Only an unsuccessful response carries problem details worth reading.
-        var content = response.IsSuccessStatusCode ? null : await response.Content.ReadAsStringAsync(cancellationToken);
+        var problem = response.IsSuccessStatusCode ? null : await ReadProblemAsync(response, cancellationToken);
 
         var outcome = QuantityManagementOutcome.FromResponse(
             operation,
             chedReference,
             mrn,
             response.StatusCode,
-            content
+            problem
         );
         outcomeRecorder.Record(outcome);
 
         return outcome;
+    }
+
+    private static async Task<ProblemDetails?> ReadProblemAsync(
+        HttpResponseMessage response,
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            return await response.Content.ReadFromJsonAsync<ProblemDetails>(cancellationToken);
+        }
+        catch (JsonException)
+        {
+            // An empty or non-JSON body (e.g. from a proxy) - there are no problem details to read.
+            return null;
+        }
     }
 }

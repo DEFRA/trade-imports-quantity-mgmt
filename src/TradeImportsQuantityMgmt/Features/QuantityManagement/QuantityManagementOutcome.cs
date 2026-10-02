@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using Microsoft.AspNetCore.Mvc;
 
 namespace TradeImportsQuantityMgmt.Features.QuantityManagement;
 
@@ -15,9 +16,8 @@ public enum QuantityManagementOperation
 }
 
 /// <summary>
-/// An outcome response received from TRACES Quantity Management. A successful response has the
-/// outcome <see cref="SuccessOutcome"/>; an unsuccessful one carries the <c>reason</c> from the
-/// problem details extensions, or <see cref="UnknownOutcome"/> when TRACES didn't supply one.
+/// An outcome response received from TRACES Quantity Management. An unsuccessful response carries
+/// the TRACES <c>reason</c> and <c>detail</c> from its problem details, when supplied.
 /// </summary>
 public sealed record QuantityManagementOutcome(
     QuantityManagementOperation Operation,
@@ -29,62 +29,32 @@ public sealed record QuantityManagementOutcome(
 )
 {
     public const string SuccessOutcome = "Success";
-    public const string UnknownOutcome = "Unknown";
+    public const string UnsuccessfulOutcome = "Unsuccessful";
 
     public bool IsSuccess => (int)StatusCode is >= 200 and <= 299;
 
-    public string Outcome => IsSuccess ? SuccessOutcome : Reason ?? UnknownOutcome;
+    public string Outcome => IsSuccess ? SuccessOutcome : UnsuccessfulOutcome;
 
+    // Problem details are deliberately read as the framework ProblemDetails rather than the gateway's
+    // ChedReservationProblemDetails: the latter's get-only Reason property claims the "reason" key
+    // during deserialisation, so the value never reaches Extensions and is lost.
     public static QuantityManagementOutcome FromResponse(
         QuantityManagementOperation operation,
         string chedId,
         string mrn,
         HttpStatusCode statusCode,
-        string? content
+        ProblemDetails? problem
     )
     {
-        var outcome = new QuantityManagementOutcome(operation, chedId, mrn, statusCode, null, null);
-        if (outcome.IsSuccess)
-            return outcome;
-
-        return outcome with
+        object? reasonValue = null;
+        problem?.Extensions.TryGetValue("reason", out reasonValue);
+        var reason = reasonValue switch
         {
-            Reason = TryGetString(content, "reason"),
-            Detail = TryGetString(content, "detail"),
+            JsonElement { ValueKind: JsonValueKind.String } element => element.GetString(),
+            string value => value,
+            _ => null,
         };
-    }
 
-    // ChedReservationProblemDetails.Reason is a get-only property computed from Extensions["reason"],
-    // but that means System.Text.Json already claims the "reason" key for the (unwritable) Reason
-    // property during deserialisation, so it never actually reaches Extensions and Reason is always
-    // null. Read the problem details fields back out of the raw body ourselves so they aren't lost.
-    private static string? TryGetString(string? content, string propertyName)
-    {
-        if (string.IsNullOrEmpty(content))
-            return null;
-
-        try
-        {
-            using var document = JsonDocument.Parse(content);
-            if (document.RootElement.ValueKind != JsonValueKind.Object)
-                return null;
-
-            foreach (var property in document.RootElement.EnumerateObject())
-            {
-                if (
-                    string.Equals(property.Name, propertyName, StringComparison.OrdinalIgnoreCase)
-                    && property.Value.ValueKind == JsonValueKind.String
-                )
-                {
-                    return property.Value.GetString();
-                }
-            }
-        }
-        catch (JsonException)
-        {
-            // Not JSON - nothing to extract.
-        }
-
-        return null;
+        return new QuantityManagementOutcome(operation, chedId, mrn, statusCode, reason, problem?.Detail);
     }
 }
