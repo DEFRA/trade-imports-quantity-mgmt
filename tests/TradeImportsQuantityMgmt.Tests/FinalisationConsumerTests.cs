@@ -430,7 +430,7 @@ public sealed class FinalisationConsumerTests : IDisposable
     [InlineData(FinalState.Destroyed)]
     [InlineData(FinalState.Seized)]
     [InlineData(FinalState.ReleasedToKingsWarehouse)]
-    public async Task ConsumeAsync_ReleasesReservation_WhenFinalStateIsReleasableAndNotManualRelease(string finalState)
+    public async Task ConsumeAsync_ReleasesReservation_WhenFinalStateIsReleasable(string finalState)
     {
         // Arrange
         var mrn = "25GBVLKTCO0HN7MUA4";
@@ -468,7 +468,7 @@ public sealed class FinalisationConsumerTests : IDisposable
     [InlineData(FinalState.Destroyed)]
     [InlineData(FinalState.Seized)]
     [InlineData(FinalState.ReleasedToKingsWarehouse)]
-    public async Task ConsumeAsync_DoesNotReleaseReservation_WhenManualRelease(string finalState)
+    public async Task ConsumeAsync_ReleasesReservation_WhenManualRelease(string finalState)
     {
         // Arrange
         var mrn = "25GBVLKTCO0HN7MUA4";
@@ -476,6 +476,10 @@ public sealed class FinalisationConsumerTests : IDisposable
 
         var dataApiClient = Substitute.For<ITradeImportsDataApiClient>();
         var tracesClient = Substitute.For<ITracesGatewayChedClient>();
+
+        tracesClient
+            .ReleaseChedReservation(ched, mrn, TestContext.Current.CancellationToken)
+            .Returns(Task.FromResult(new HttpResponseMessage(HttpStatusCode.InternalServerError)));
 
         StubTracesChedsByMrn(dataApiClient, mrn, ched);
 
@@ -488,7 +492,12 @@ public sealed class FinalisationConsumerTests : IDisposable
         await consumer.ConsumeAsync(context, TestContext.Current.CancellationToken);
 
         // Assert
-        CallsTo(tracesClient, nameof(ITracesGatewayChedClient.ReleaseChedReservation)).Should().BeEmpty();
+        CallsTo(tracesClient, nameof(ITracesGatewayChedClient.ReleaseChedReservation))
+            .Should()
+            .ContainSingle()
+            .Which.Take(2)
+            .Should()
+            .Equal(ched, mrn);
         CallsTo(tracesClient, nameof(ITracesGatewayChedClient.DeleteChedReservation)).Should().BeEmpty();
     }
 
