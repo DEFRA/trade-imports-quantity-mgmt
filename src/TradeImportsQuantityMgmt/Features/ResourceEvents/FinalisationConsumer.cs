@@ -50,8 +50,7 @@ public class FinalisationConsumer(
                 FinalState: FinalState.Cleared
                     or FinalState.Destroyed
                     or FinalState.Seized
-                    or FinalState.ReleasedToKingsWarehouse,
-                IsManualRelease: false,
+                    or FinalState.ReleasedToKingsWarehouse
             }:
                 await ProcessClearanceAsync(chedReferences, mrn, cancellationToken);
                 break;
