@@ -41,6 +41,12 @@ jobs:
         run: |
           dotnet nuget remove source defra
           dotnet nuget add source --username USERNAME --password $GITHUB_TOKEN --store-password-in-clear-text --name defra "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" --configfile NuGet.config
+      - name: Run unit tests
+        run: |
+          dotnet test tests/TradeImportsQuantityMgmt.Tests/TradeImportsQuantityMgmt.Tests.csproj
+      - name: Run integration tests
+        run: |
+          dotnet test tests/TradeImportsQuantityMgmt.IntegrationTests/TradeImportsQuantityMgmt.IntegrationTests.csproj
       - name: Build and Publish
         uses: DEFRA/cdp-build-action/build@5f3ba75f66a3ef96855322c137727ff996cc2995
         with:
@@ -55,18 +61,14 @@ jobs:
             --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" \
             --api-key "$GITHUB_TOKEN" \
             --skip-duplicate
-  ## SonarCloud
-  ## Uncomment to enable SonarCloud scan
-  ## Requires project to be set up in SonarCloud
-  ## and the SonarCloud token to be set in the repository secrets
-  # sonarcloud-scan:
-  #   name: CDP SonarCloud Scan
-  #   permissions:
-  #     id-token: write
-  #     pull-requests: write
-  #     contents: read
-  #     packages: read
-  #   uses: ./.github/workflows/sonarcloud.yml
-  #   needs: build
-  #   secrets:
-  #     SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+  sonarcloud-scan:
+    name: CDP SonarCloud Scan
+    permissions:
+      id-token: write
+      pull-requests: write
+      contents: read
+      packages: read
+    uses: ./.github/workflows/sonarcloud.yml
+    needs: build
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
