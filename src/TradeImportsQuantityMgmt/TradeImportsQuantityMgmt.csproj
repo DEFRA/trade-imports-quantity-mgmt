@@ -16,7 +16,7 @@
     <PackageReference Include="Defra.TradeImports.Api.Metrics" Version="0.1.0" />
     <PackageReference Include="Defra.TradeImports.Tracing" Version="0.2.0" />
     <PackageReference Include="Defra.TradeImports.EmfExporter" Version="0.2.0" />
-    <PackageReference Include="Defra.Trade.Gateway.Api.Client" Version="0.7.0" />
+    <PackageReference Include="Defra.Trade.Gateway.Api.Client" Version="0.9.0" />
     <PackageReference Include="Defra.TradeImportsDataApi.Api.Client" Version="0.51.0" />
     <PackageReference Include="Elastic.CommonSchema.Serilog" Version="9.0.0" />
     <PackageReference Include="Elastic.Serilog.Enrichers.Web" Version="9.0.0" />
@@ -24,7 +24,7 @@
     <PackageReference Include="MongoDB.Driver" Version="3.11.1" />
     <PackageReference Include="MongoDB.Driver.Authentication.AWS" Version="3.11.1" />
     <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
-    <PackageReference Include="Serilog.Enrichers.ClientInfo" Version="2.9.0" />
+    <PackageReference Include="Serilog.Enrichers.ClientInfo" Version="3.0.0" />
     <PackageReference Include="Serilog.Enrichers.Environment" Version="3.0.1" />
     <PackageReference Include="Serilog.Enrichers.Thread" Version="4.0.0" />
     <PackageReference Include="Serilog.Formatting.Compact" Version="3.0.0" />
